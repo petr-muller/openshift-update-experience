@@ -47,6 +47,30 @@ const (
 	ClusterVersionAssessmentDegraded ClusterVersionAssessment = "Degraded"
 )
 
+// ClusterVersionProgressInsightConditionType are types of conditions that can be reported on ClusterVersion progress insight
+type ClusterVersionProgressInsightConditionType string
+
+//goland:noinspection GoCommentStart
+const (
+	// Updating condition communicates whether the control plane, represented by this ClusterVersion, is updating
+	ClusterVersionProgressInsightUpdating ClusterVersionProgressInsightConditionType = "Updating"
+	// Healthy condition communicates whether the control plane update process is observed to be healthy
+	ClusterVersionProgressInsightHealthy ClusterVersionProgressInsightConditionType = "Healthy"
+)
+
+// ClusterVersionProgressInsightUpdatingReason are well-known reasons for the Updating condition on ClusterVersion progress insights
+type ClusterVersionProgressInsightUpdatingReason string
+
+//goland:noinspection GoCommentStart
+const (
+	// CannotDetermineUpdating is used with Updating=Unknown
+	ClusterVersionCannotDetermineUpdating ClusterVersionProgressInsightUpdatingReason = "CannotDetermineUpdating"
+	// ClusterVersionProgressing means that ClusterVersion is considered to be Updating=True because it has a Progressing=True condition
+	ClusterVersionProgressing ClusterVersionProgressInsightUpdatingReason = "Progressing"
+	// ClusterVersionNotProgressing means that ClusterVersion is considered to be Updating=False because it has a Progressing=False condition
+	ClusterVersionNotProgressing ClusterVersionProgressInsightUpdatingReason = "NotProgressing"
+)
+
 // VersionMetadataKey is a key for a metadata value associated with a version
 // +kubebuilder:validation:Enum=Installation;Partial;Architecture
 type VersionMetadataKey string
