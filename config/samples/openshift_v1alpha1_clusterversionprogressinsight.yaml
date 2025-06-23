@@ -1,0 +1,9 @@
+apiVersion: openshift.muller.dev/v1alpha1
+kind: ClusterVersionProgressInsight
+metadata:
+  labels:
+    app.kubernetes.io/name: openshift-update-experience
+    app.kubernetes.io/managed-by: kustomize
+  name: clusterversionprogressinsight-sample
+spec:
+  # TODO(user): Add fields here
