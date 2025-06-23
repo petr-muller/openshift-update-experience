@@ -235,14 +235,14 @@ func (r *ClusterVersionProgressInsightReconciler) Reconcile(ctx context.Context,
 	logger := logf.FromContext(ctx)
 
 	var clusterVersion openshiftconfigv1.ClusterVersion
-	cvErr := r.Client.Get(ctx, req.NamespacedName, &clusterVersion)
+	cvErr := r.Get(ctx, req.NamespacedName, &clusterVersion)
 	if cvErr != nil && !apierrors.IsNotFound(cvErr) {
 		logger.WithValues("ClusterVersion", req.NamespacedName).Error(cvErr, "Failed to get ClusterVersion")
 		return ctrl.Result{}, cvErr
 	}
 
 	var progressInsight ouev1alpha1.ClusterVersionProgressInsight
-	err := r.Client.Get(ctx, req.NamespacedName, &progressInsight)
+	err := r.Get(ctx, req.NamespacedName, &progressInsight)
 	if err != nil && !apierrors.IsNotFound(err) {
 		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Error(err, "Failed to get ClusterVersionProgressInsight")
 		return ctrl.Result{}, err
@@ -257,7 +257,7 @@ func (r *ClusterVersionProgressInsightReconciler) Reconcile(ctx context.Context,
 	if apierrors.IsNotFound(cvErr) && !apierrors.IsNotFound(err) {
 		// If the ClusterVersion does not exist, we can delete the progress insight
 		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Info("ClusterVersion does not exist, deleting ClusterVersionProgressInsight")
-		if err := r.Client.Delete(ctx, &progressInsight); err != nil {
+		if err := r.Delete(ctx, &progressInsight); err != nil {
 			logger.Error(err, "Failed to delete ClusterVersionProgressInsight")
 			return ctrl.Result{}, err
 		}
@@ -271,7 +271,7 @@ func (r *ClusterVersionProgressInsightReconciler) Reconcile(ctx context.Context,
 	progressInsight.Name = clusterVersion.Name
 
 	if apierrors.IsNotFound(err) {
-		if err := r.Client.Create(ctx, &progressInsight); err != nil {
+		if err := r.Create(ctx, &progressInsight); err != nil {
 			logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Error(err, "Failed to create ClusterVersionProgressInsight")
 			return ctrl.Result{}, err
 		}
