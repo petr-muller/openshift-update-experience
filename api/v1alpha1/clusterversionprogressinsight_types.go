@@ -196,15 +196,10 @@ type ClusterVersionProgressInsightStatus struct {
 
 // ClusterVersionProgressInsight provides summary information about an ongoing cluster control plane update in Standalone clusters
 //
-// Compatibility level 4: No compatibility is provided, the API can change at any point for any reason. These capabilities should not be used by applications needing long term support.
-// +openshift:compatibility-gen:level=4
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:resource:path=clusterversionprogressinsights,scope=Cluster
-// +openshift:api-approved.openshift.io=https://github.com/openshift/api/pull/2012
-// +openshift:file-pattern=cvoRunLevel=0000_00,operatorName=cluster-version-operator,operatorOrdering=02
-// +openshift:enable:FeatureGate=UpgradeStatus
 // +kubebuilder:metadata:annotations="description=Provides summary information about an ongoing cluster control plane update in Standalone clusters."
 // +kubebuilder:metadata:annotations="displayName=ClusterVersionProgressInsights"
 // +kubebuilder:validation:XValidation:rule="!has(self.status) || self.status.name == self.metadata.name",message="When status is present, .status must match .metadata.name"
