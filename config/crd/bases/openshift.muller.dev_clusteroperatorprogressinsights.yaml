@@ -19,10 +19,8 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: |-
-          ClusterOperatorProgressInsight reports the state of a Cluster Operator (an individual control plane component) during an update
-
-          Compatibility level 4: No compatibility is provided, the API can change at any point for any reason. These capabilities should not be used by applications needing long term support.
+        description: ClusterOperatorProgressInsight reports the state of a Cluster
+          Operator (an individual control plane component) during an update
         properties:
           apiVersion:
             description: |-
