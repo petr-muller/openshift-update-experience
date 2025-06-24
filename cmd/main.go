@@ -214,6 +214,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterOperatorProgressInsight")
 		os.Exit(1)
 	}
+	if err = (&controller.NodeProgressInsightReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NodeProgressInsight")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {
