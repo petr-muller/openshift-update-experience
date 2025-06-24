@@ -188,31 +188,32 @@ func (r *ClusterOperatorProgressInsightReconciler) Reconcile(ctx context.Context
 
 	var clusterOperator openshiftconfigv1.ClusterOperator
 	coErr := r.Get(ctx, req.NamespacedName, &clusterOperator)
-	if coErr != nil && !apierrors.IsNotFound(coErr) {
+	coNotFound := apierrors.IsNotFound(coErr)
+	if coErr != nil && !coNotFound {
 		logger.WithValues("ClusterOperator", req.NamespacedName).Error(coErr, "Failed to get ClusterOperator")
 		return ctrl.Result{}, coErr
 	}
 
 	var progressInsight ouev1alpha1.ClusterOperatorProgressInsight
-	err := r.Get(ctx, req.NamespacedName, &progressInsight)
-	if err != nil && !apierrors.IsNotFound(err) {
-		logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Error(err, "Failed to get ClusterOperatorProgressInsight")
-		return ctrl.Result{}, err
+	piErr := r.Get(ctx, req.NamespacedName, &progressInsight)
+	progressInsightNotFound := apierrors.IsNotFound(piErr)
+	if piErr != nil && !progressInsightNotFound {
+		logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Error(piErr, "Failed to get ClusterOperatorProgressInsight")
+		return ctrl.Result{}, piErr
 	}
 
-	if apierrors.IsNotFound(coErr) && apierrors.IsNotFound(err) {
-		// If both ClusterOperator and ClusterOperatorProgressInsight do not exist, we can return early
-		logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Info("Both ClusterOperator and ClusterOperatorProgressInsight do not exist, nothing to reconcile")
-		return ctrl.Result{}, nil
-	}
-
-	if apierrors.IsNotFound(coErr) && !apierrors.IsNotFound(err) {
-		// If ClusterOperator does not exist but ClusterOperatorProgressInsight does, we can delete the insight
-		logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Info("ClusterOperator does not exist, deleting ClusterOperatorProgressInsight")
-		if err := r.Delete(ctx, &progressInsight); err != nil {
-			logger.Error(err, "Failed to delete ClusterOperatorProgressInsight")
-			return ctrl.Result{}, err
+	if coNotFound {
+		if progressInsightNotFound {
+			// If both ClusterOperator and ClusterOperatorProgressInsight do not exist, we can return early
+			logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Info("Both ClusterOperator and ClusterOperatorProgressInsight do not exist, nothing to reconcile")
+		} else {
+			logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Info("ClusterOperator does not exist, deleting ClusterOperatorProgressInsight")
+			if err := r.Delete(ctx, &progressInsight); err != nil {
+				logger.Error(err, "Failed to delete ClusterOperatorProgressInsight")
+				return ctrl.Result{}, err
+			}
 		}
+
 		return ctrl.Result{}, nil
 	}
 
@@ -241,7 +242,7 @@ func (r *ClusterOperatorProgressInsightReconciler) Reconcile(ctx context.Context
 	progressInsight.Status = *coInsight
 	progressInsight.Name = clusterOperator.Name
 
-	if apierrors.IsNotFound(err) {
+	if progressInsightNotFound {
 		if err := r.Create(ctx, &progressInsight); err != nil {
 			logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Error(err, "Failed to create ClusterOperatorProgressInsight")
 			return ctrl.Result{}, err
