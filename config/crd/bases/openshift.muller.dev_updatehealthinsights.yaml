@@ -24,7 +24,6 @@ spec:
           UpdateHealthInsight is a piece of actionable information produced by an insight producer about the health
           of the cluster in the context of an update
 
-          Compatibility level 4: No compatibility is provided, the API can change at any point for any reason. These capabilities should not be used by applications needing long term support.
           UpdateHealthInsight is a piece of actionable information produced by an insight producer about the health
           of the cluster in the context of an update
         properties:

@@ -146,22 +146,13 @@ type UpdateHealthInsightStatus struct {
 	Remediation InsightRemediation `json:"remediation"`
 }
 
-// +genclient
-// +genclient:nonNamespaced
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
 // UpdateHealthInsight is a piece of actionable information produced by an insight producer about the health
 // of the cluster in the context of an update
 //
-// Compatibility level 4: No compatibility is provided, the API can change at any point for any reason. These capabilities should not be used by applications needing long term support.
-// +openshift:compatibility-gen:level=4
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:resource:path=updatehealthinsights,scope=Cluster
-// +openshift:api-approved.openshift.io=https://github.com/openshift/api/pull/2012
-// +openshift:file-pattern=cvoRunLevel=0000_00,operatorName=cluster-version-operator,operatorOrdering=02
-// +openshift:enable:FeatureGate=UpgradeStatus
 // +kubebuilder:metadata:annotations="description=Reports a piece of actionable information about the health of the cluster in the context of an update"
 // +kubebuilder:metadata:annotations="displayName=UpdateHealthInsights"
 // UpdateHealthInsight is a piece of actionable information produced by an insight producer about the health
