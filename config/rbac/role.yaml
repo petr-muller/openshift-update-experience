@@ -17,6 +17,7 @@ rules:
   resources:
   - clusteroperatorprogressinsights
   - clusterversionprogressinsights
+  - nodeprogressinsights
   - updatehealthinsights
   verbs:
   - create
@@ -31,6 +32,7 @@ rules:
   resources:
   - clusteroperatorprogressinsights/finalizers
   - clusterversionprogressinsights/finalizers
+  - nodeprogressinsights/finalizers
   - updatehealthinsights/finalizers
   verbs:
   - update
@@ -39,6 +41,7 @@ rules:
   resources:
   - clusteroperatorprogressinsights/status
   - clusterversionprogressinsights/status
+  - nodeprogressinsights/status
   - updatehealthinsights/status
   verbs:
   - get
