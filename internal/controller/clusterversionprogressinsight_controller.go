@@ -18,18 +18,25 @@ package controller
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/base64"
 	"fmt"
+	"strings"
 	"time"
 
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
 )
@@ -164,13 +171,38 @@ func estimateCompletion(started time.Time) time.Time {
 	return started.Add(60 * time.Minute)
 }
 
+const (
+	uscForceHealthInsightAnnotation = "oue.openshift.muller.dev/force-health-insight"
+)
+
+func forcedHealthInsight(cv *openshiftconfigv1.ClusterVersion, now metav1.Time) *ouev1alpha1.UpdateHealthInsightStatus {
+	if _, ok := cv.Annotations[uscForceHealthInsightAnnotation]; !ok {
+		return nil
+	}
+
+	return &ouev1alpha1.UpdateHealthInsightStatus{
+		StartedAt: now,
+		Scope: ouev1alpha1.InsightScope{
+			Type:      ouev1alpha1.ControlPlaneScope,
+			Resources: []ouev1alpha1.ResourceRef{{Resource: "clusterversions", Group: openshiftconfigv1.GroupName, Name: cv.Name}},
+		},
+		Impact: ouev1alpha1.InsightImpact{
+			Level:       ouev1alpha1.InfoImpactLevel,
+			Type:        ouev1alpha1.NoneImpactType,
+			Summary:     fmt.Sprintf("Forced health insight for ClusterVersion %s", cv.Name),
+			Description: fmt.Sprintf("The resource has a %q annotation which forces USC to generate this health insight for testing purposes.", uscForceHealthInsightAnnotation),
+		},
+		Remediation: ouev1alpha1.InsightRemediation{
+			Reference: "https://issues.redhat.com/browse/OTA-1418",
+		},
+	}
+}
+
 // assessClusterVersion produces a ClusterVersion status insight from the current state of the ClusterVersion resource.
 // It does not take previous status insight into account. Many fields of the status insights (such as completion) cannot
 // be properly calculated without also watching and processing ClusterOperators, so that functionality will need to be
 // added later.
-// TODO(muller): Port HealthInsights later
-// func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, now metav1.Time) (*ouev1alpha1.ClusterVersionProgressInsightStatus, []*ouev1alpha1.HealthInsightStatus) {
-func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, now metav1.Time) *ouev1alpha1.ClusterVersionProgressInsightStatus {
+func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, now metav1.Time) (*ouev1alpha1.ClusterVersionProgressInsightStatus, []*ouev1alpha1.UpdateHealthInsightStatus) {
 
 	var lastHistoryItem *openshiftconfigv1.UpdateHistory
 	if len(cv.Status.History) > 0 {
@@ -216,14 +248,104 @@ func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, now metav1.Time)
 		insight.EstimatedCompletedAt = &metav1.Time{Time: est}
 	}
 
-	// TODO(muller): Port HealthInsights later
-	// var healthInsights []*ouev1alpha1.HealthInsightStatus
-	// if forcedHealthInsight := forcedHealthInsight(cv, now); forcedHealthInsight != nil {
-	// 	healthInsights = append(healthInsights, forcedHealthInsight)
-	// }
-	//
-	// return insight, healthInsights
-	return insight
+	var healthInsights []*ouev1alpha1.UpdateHealthInsightStatus
+	if forcedHealthInsight := forcedHealthInsight(cv, now); forcedHealthInsight != nil {
+		healthInsights = append(healthInsights, forcedHealthInsight)
+	}
+
+	return insight, healthInsights
+}
+
+func nameForHealthInsight(healthInsight *ouev1alpha1.UpdateHealthInsightStatus) string {
+	hasher := md5.New()
+	hasher.Write([]byte(healthInsight.Impact.Summary))
+	for i := range healthInsight.Scope.Resources {
+		hasher.Write([]byte(healthInsight.Scope.Resources[i].Group))
+		hasher.Write([]byte(healthInsight.Scope.Resources[i].Resource))
+		hasher.Write([]byte(healthInsight.Scope.Resources[i].Namespace))
+		hasher.Write([]byte(healthInsight.Scope.Resources[i].Name))
+	}
+
+	sum := hasher.Sum(nil)
+	encoded := base64.StdEncoding.EncodeToString(sum)
+	encoded = strings.TrimRight(encoded, "=")
+
+	return encoded
+}
+
+func (r *ClusterVersionProgressInsightReconciler) reconcileHealthInsights(ctx context.Context, cvProgressInsight *ouev1alpha1.ClusterVersionProgressInsight, healthInsights []*ouev1alpha1.UpdateHealthInsightStatus) error {
+	var clusterInsights ouev1alpha1.UpdateHealthInsightList
+	if err := r.Client.List(ctx, &clusterInsights, client.MatchingLabels{labelUpdateHealthInsightManager: "clusterversion"}); err != nil {
+		klog.ErrorS(err, "Failed to list existing UpdateHealthInsights")
+		return err
+	}
+
+	clusterInsightNames := sets.NewString()
+	clusterInsightsByName := make(map[string]*ouev1alpha1.UpdateHealthInsight, len(clusterInsights.Items))
+	for _, insight := range clusterInsights.Items {
+		clusterInsightNames.Insert(insight.Name)
+		clusterInsightsByName[insight.Name] = &insight
+	}
+
+	ourInsightNames := sets.NewString()
+	ourInsightsByName := make(map[string]*ouev1alpha1.UpdateHealthInsightStatus, len(healthInsights))
+	for _, insight := range healthInsights {
+		ourInsightNames.Insert(nameForHealthInsight(insight))
+		ourInsightsByName[nameForHealthInsight(insight)] = insight
+	}
+
+	toCreate := ourInsightNames.Difference(clusterInsightNames)
+	toDelete := clusterInsightNames.Difference(ourInsightNames)
+	toUpdate := clusterInsightNames.Intersection(ourInsightNames)
+
+	var createErrs []error
+	for _, insight := range toCreate.UnsortedList() {
+		healthInsight := &ouev1alpha1.UpdateHealthInsight{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   insight,
+				Labels: map[string]string{labelUpdateHealthInsightManager: "clusterversion"},
+			},
+			Status: *ourInsightsByName[insight],
+		}
+		if err := ctrl.SetControllerReference(cvProgressInsight, healthInsight, r.Scheme); err != nil {
+			klog.ErrorS(err, "Failed to set controller reference for UpdateHealthInsight", "name", healthInsight.Name)
+			createErrs = append(createErrs, err)
+			continue
+		}
+		if err := r.Create(ctx, healthInsight); err != nil {
+			klog.ErrorS(err, "Failed to create UpdateHealthInsight", "name", healthInsight.Name)
+			createErrs = append(createErrs, err)
+		} else {
+			klog.InfoS("Created UpdateHealthInsight", "name", healthInsight.Name)
+		}
+	}
+
+	var updateErrs []error
+	for _, insight := range toUpdate.UnsortedList() {
+		healthInsight := clusterInsightsByName[insight]
+		ourInsight := ourInsightsByName[insight]
+		update := healthInsight.DeepCopy()
+		update.Status = *ourInsight
+		if err := r.Client.Status().Update(ctx, update); err != nil {
+			klog.ErrorS(err, "Failed to update UpdateHealthInsight status", "name", healthInsight.Name)
+			updateErrs = append(updateErrs, err)
+		} else {
+			klog.InfoS("Updated UpdateHealthInsight status", "name", healthInsight.Name)
+		}
+	}
+
+	var deleteErrs []error
+	for _, insight := range toDelete.UnsortedList() {
+		healthInsight := clusterInsightsByName[insight]
+		if err := r.Delete(ctx, healthInsight); err != nil {
+			klog.ErrorS(err, "Failed to delete UpdateHealthInsight", "name", healthInsight.Name)
+			deleteErrs = append(deleteErrs, err)
+		} else {
+			klog.InfoS("Deleted UpdateHealthInsight", "name", healthInsight.Name)
+		}
+	}
+
+	return errors.NewAggregate(append(append(createErrs, updateErrs...), deleteErrs...))
 }
 
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=clusterversionprogressinsights,verbs=get;list;watch;create;update;patch;delete
@@ -277,9 +399,8 @@ func (r *ClusterVersionProgressInsightReconciler) Reconcile(ctx context.Context,
 	}
 
 	now := r.now()
-	// TODO(muller): Port HealthInsights later
-	// cvInsight, healthInsights := assessClusterVersion(clusterVersion, now)
-	progressInsight.Status = *assessClusterVersion(&clusterVersion, now)
+	cvInsight, healthInsights := assessClusterVersion(&clusterVersion, now)
+	progressInsight.Status = *cvInsight
 	progressInsight.Name = clusterVersion.Name
 
 	if apierrors.IsNotFound(err) {
@@ -288,8 +409,7 @@ func (r *ClusterVersionProgressInsightReconciler) Reconcile(ctx context.Context,
 			return ctrl.Result{}, err
 		}
 		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Info("Created ClusterVersionProgressInsight")
-		return ctrl.Result{}, nil
-
+		return ctrl.Result{}, r.reconcileHealthInsights(ctx, &progressInsight, healthInsights)
 	}
 
 	if err := r.Client.Status().Update(ctx, &progressInsight); err != nil {
@@ -297,14 +417,20 @@ func (r *ClusterVersionProgressInsightReconciler) Reconcile(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 	logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Info("Updated ClusterVersionProgressInsight status")
-
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, r.reconcileHealthInsights(ctx, &progressInsight, healthInsights)
 }
+
+const (
+	labelUpdateHealthInsightManager = "oue.openshift.muller.dev/update-health-insight-manager"
+)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterVersionProgressInsightReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ouev1alpha1.ClusterVersionProgressInsight{}).
+		Owns(&ouev1alpha1.UpdateHealthInsight{}, builder.WithPredicates(predicate.NewPredicateFuncs(func(o client.Object) bool {
+			return o.GetLabels()[labelUpdateHealthInsightManager] == "clusterversion"
+		}))).
 		Named("clusterversionprogressinsight").
 		Watches(
 			&openshiftconfigv1.ClusterVersion{},
