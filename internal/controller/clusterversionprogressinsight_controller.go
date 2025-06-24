@@ -42,6 +42,15 @@ type ClusterVersionProgressInsightReconciler struct {
 	now func() metav1.Time
 }
 
+// NewClusterVersionProgressInsightReconciler creates a new ClusterVersionProgressInsightReconciler with the given client and scheme.
+func NewClusterVersionProgressInsightReconciler(client client.Client, scheme *runtime.Scheme) *ClusterVersionProgressInsightReconciler {
+	return &ClusterVersionProgressInsightReconciler{
+		Client: client,
+		Scheme: scheme,
+		now:    metav1.Now,
+	}
+}
+
 func findOperatorStatusCondition(conditions []openshiftconfigv1.ClusterOperatorStatusCondition, conditionType openshiftconfigv1.ClusterStatusConditionType) *openshiftconfigv1.ClusterOperatorStatusCondition {
 	for i := range conditions {
 		if conditions[i].Type == conditionType {
