@@ -15,6 +15,7 @@ rules:
 - apiGroups:
   - openshift.muller.dev
   resources:
+  - clusteroperatorprogressinsights
   - clusterversionprogressinsights
   - updatehealthinsights
   verbs:
@@ -28,6 +29,7 @@ rules:
 - apiGroups:
   - openshift.muller.dev
   resources:
+  - clusteroperatorprogressinsights/finalizers
   - clusterversionprogressinsights/finalizers
   - updatehealthinsights/finalizers
   verbs:
@@ -35,6 +37,7 @@ rules:
 - apiGroups:
   - openshift.muller.dev
   resources:
+  - clusteroperatorprogressinsights/status
   - clusterversionprogressinsights/status
   - updatehealthinsights/status
   verbs:
