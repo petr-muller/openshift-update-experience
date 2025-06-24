@@ -26,4 +26,12 @@ resources:
   kind: UpdateHealthInsight
   path: github.com/petr-muller/openshift-update-experience/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: muller.dev
+  group: openshift
+  kind: ClusterOperatorProgressInsight
+  path: github.com/petr-muller/openshift-update-experience/api/v1alpha1
+  version: v1alpha1
 version: "3"

@@ -22,6 +22,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the {{ .ProjectName }} itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- clusteroperatorprogressinsight_admin_role.yaml
+- clusteroperatorprogressinsight_editor_role.yaml
+- clusteroperatorprogressinsight_viewer_role.yaml
 - updatehealthinsight_admin_role.yaml
 - updatehealthinsight_editor_role.yaml
 - updatehealthinsight_viewer_role.yaml
