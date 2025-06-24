@@ -19,7 +19,7 @@ package controller
 import (
 	"context"
 	"crypto/md5"
-	"encoding/base64"
+	"encoding/base32"
 	"fmt"
 	"strings"
 	"time"
@@ -256,7 +256,7 @@ func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, now metav1.Time)
 	return insight, healthInsights
 }
 
-func nameForHealthInsight(healthInsight *ouev1alpha1.UpdateHealthInsightStatus) string {
+func nameForHealthInsight(prefix string, healthInsight *ouev1alpha1.UpdateHealthInsightStatus) string {
 	hasher := md5.New()
 	hasher.Write([]byte(healthInsight.Impact.Summary))
 	for i := range healthInsight.Scope.Resources {
@@ -267,10 +267,10 @@ func nameForHealthInsight(healthInsight *ouev1alpha1.UpdateHealthInsightStatus) 
 	}
 
 	sum := hasher.Sum(nil)
-	encoded := base64.StdEncoding.EncodeToString(sum)
-	encoded = strings.TrimRight(encoded, "=")
+	encoded := base32.StdEncoding.EncodeToString(sum)
+	encoded = strings.ToLower(strings.TrimRight(encoded, "="))
 
-	return encoded
+	return fmt.Sprintf("%s-%s", prefix, encoded)
 }
 
 func (r *ClusterVersionProgressInsightReconciler) reconcileHealthInsights(ctx context.Context, cvProgressInsight *ouev1alpha1.ClusterVersionProgressInsight, healthInsights []*ouev1alpha1.UpdateHealthInsightStatus) error {
@@ -290,8 +290,8 @@ func (r *ClusterVersionProgressInsightReconciler) reconcileHealthInsights(ctx co
 	ourInsightNames := sets.NewString()
 	ourInsightsByName := make(map[string]*ouev1alpha1.UpdateHealthInsightStatus, len(healthInsights))
 	for _, insight := range healthInsights {
-		ourInsightNames.Insert(nameForHealthInsight(insight))
-		ourInsightsByName[nameForHealthInsight(insight)] = insight
+		ourInsightNames.Insert(nameForHealthInsight("cv", insight))
+		ourInsightsByName[nameForHealthInsight("cv", insight)] = insight
 	}
 
 	toCreate := ourInsightNames.Difference(clusterInsightNames)
