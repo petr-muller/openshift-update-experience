@@ -1,4 +1,5 @@
 ## Append samples of your project ##
 resources:
 - openshift_v1alpha1_clusterversionprogressinsight.yaml
+- openshift_v1alpha1_updatehealthinsight.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

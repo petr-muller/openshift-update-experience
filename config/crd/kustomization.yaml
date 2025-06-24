@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/openshift.muller.dev_clusterversionprogressinsights.yaml
+- bases/openshift.muller.dev_updatehealthinsights.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
