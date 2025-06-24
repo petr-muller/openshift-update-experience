@@ -275,7 +275,7 @@ func nameForHealthInsight(prefix string, healthInsight *ouev1alpha1.UpdateHealth
 
 func (r *ClusterVersionProgressInsightReconciler) reconcileHealthInsights(ctx context.Context, cvProgressInsight *ouev1alpha1.ClusterVersionProgressInsight, healthInsights []*ouev1alpha1.UpdateHealthInsightStatus) error {
 	var clusterInsights ouev1alpha1.UpdateHealthInsightList
-	if err := r.Client.List(ctx, &clusterInsights, client.MatchingLabels{labelUpdateHealthInsightManager: "clusterversion"}); err != nil {
+	if err := r.List(ctx, &clusterInsights, client.MatchingLabels{labelUpdateHealthInsightManager: "clusterversion"}); err != nil {
 		klog.ErrorS(err, "Failed to list existing UpdateHealthInsights")
 		return err
 	}

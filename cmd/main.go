@@ -204,14 +204,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (controller.NewClusterVersionProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())).SetupWithManager(mgr); err != nil {
+	cvInformer := controller.NewClusterVersionProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())
+	if err = cvInformer.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterVersionProgressInsight")
 		os.Exit(1)
 	}
-	if err = (&controller.ClusterOperatorProgressInsightReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	coInformer := controller.NewClusterOperatorProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())
+	if err = coInformer.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterOperatorProgressInsight")
 		os.Exit(1)
 	}

@@ -47,9 +47,18 @@ type ClusterOperatorProgressInsightReconciler struct {
 	now func() metav1.Time
 }
 
+// NewClusterOperatorProgressInsightReconciler creates a new ClusterOperatorProgressInsightReconciler with the given client and scheme.
+func NewClusterOperatorProgressInsightReconciler(client client.Client, scheme *runtime.Scheme) *ClusterOperatorProgressInsightReconciler {
+	return &ClusterOperatorProgressInsightReconciler{
+		Client: client,
+		Scheme: scheme,
+		now:    metav1.Now,
+	}
+}
+
 type deploymentGetter func(ctx context.Context, what types.NamespacedName) (appsv1.Deployment, error)
 
-var operatorImageNotImplemented = errors.New("operator-image not implemented in the versions from cluster operator's status")
+var errOperatorImageNotImplemented = errors.New("operator-image not implemented in the versions from cluster operator's status")
 
 func getImagePullSpec(ctx context.Context, name string, getDeployment deploymentGetter) (string, error) {
 	// It is known that the image pull spec for co/machine-config can be accessed from the deployment
@@ -69,7 +78,7 @@ func getImagePullSpec(ctx context.Context, name string, getDeployment deployment
 		return "", errors.New("machine-config-operator container not found")
 	}
 	// We may add here retrieval of the image pull spec for other COs when they implement "operator-image" in the status.versions
-	return "", operatorImageNotImplemented
+	return "", errOperatorImageNotImplemented
 }
 
 func assessClusterOperator(ctx context.Context, operator *openshiftconfigv1.ClusterOperator, targetVersion string, getDeployment deploymentGetter, now metav1.Time) (*ouev1alpha1.ClusterOperatorProgressInsightStatus, error) {
@@ -81,7 +90,7 @@ func assessClusterOperator(ctx context.Context, operator *openshiftconfigv1.Clus
 	}
 
 	imagePullSpec, err := getImagePullSpec(ctx, operator.Name, getDeployment)
-	if err != nil && !errors.Is(err, operatorImageNotImplemented) {
+	if err != nil && !errors.Is(err, errOperatorImageNotImplemented) {
 		return nil, err
 	}
 
@@ -111,13 +120,12 @@ func assessClusterOperator(ctx context.Context, operator *openshiftconfigv1.Clus
 	var progressing *openshiftconfigv1.ClusterOperatorStatusCondition
 
 	for _, condition := range operator.Status.Conditions {
-		condition := condition
-		switch {
-		case condition.Type == openshiftconfigv1.OperatorAvailable:
+		switch condition.Type {
+		case openshiftconfigv1.OperatorAvailable:
 			available = &condition
-		case condition.Type == openshiftconfigv1.OperatorDegraded:
+		case openshiftconfigv1.OperatorDegraded:
 			degraded = &condition
-		case condition.Type == openshiftconfigv1.OperatorProgressing:
+		case openshiftconfigv1.OperatorProgressing:
 			progressing = &condition
 		}
 	}
@@ -179,14 +187,14 @@ func (r *ClusterOperatorProgressInsightReconciler) Reconcile(ctx context.Context
 	logger := logf.FromContext(ctx)
 
 	var clusterOperator openshiftconfigv1.ClusterOperator
-	coErr := r.Client.Get(ctx, req.NamespacedName, &clusterOperator)
+	coErr := r.Get(ctx, req.NamespacedName, &clusterOperator)
 	if coErr != nil && !apierrors.IsNotFound(coErr) {
 		logger.WithValues("ClusterOperator", req.NamespacedName).Error(coErr, "Failed to get ClusterOperator")
 		return ctrl.Result{}, coErr
 	}
 
 	var progressInsight ouev1alpha1.ClusterOperatorProgressInsight
-	err := r.Client.Get(ctx, req.NamespacedName, &progressInsight)
+	err := r.Get(ctx, req.NamespacedName, &progressInsight)
 	if err != nil && !apierrors.IsNotFound(err) {
 		logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Error(err, "Failed to get ClusterOperatorProgressInsight")
 		return ctrl.Result{}, err
@@ -201,7 +209,7 @@ func (r *ClusterOperatorProgressInsightReconciler) Reconcile(ctx context.Context
 	if apierrors.IsNotFound(coErr) && !apierrors.IsNotFound(err) {
 		// If ClusterOperator does not exist but ClusterOperatorProgressInsight does, we can delete the insight
 		logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Info("ClusterOperator does not exist, deleting ClusterOperatorProgressInsight")
-		if err := r.Client.Delete(ctx, &progressInsight); err != nil {
+		if err := r.Delete(ctx, &progressInsight); err != nil {
 			logger.Error(err, "Failed to delete ClusterOperatorProgressInsight")
 			return ctrl.Result{}, err
 		}
@@ -209,7 +217,7 @@ func (r *ClusterOperatorProgressInsightReconciler) Reconcile(ctx context.Context
 	}
 
 	var clusterVersion openshiftconfigv1.ClusterVersion
-	if err := r.Client.Get(ctx, client.ObjectKey{Name: "version"}, &clusterVersion); err != nil {
+	if err := r.Get(ctx, client.ObjectKey{Name: "version"}, &clusterVersion); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
@@ -221,7 +229,7 @@ func (r *ClusterOperatorProgressInsightReconciler) Reconcile(ctx context.Context
 	now := r.now()
 	getDeployment := func(ctx context.Context, what types.NamespacedName) (appsv1.Deployment, error) {
 		var deployment appsv1.Deployment
-		err := r.Client.Get(ctx, what, &deployment)
+		err := r.Get(ctx, what, &deployment)
 		return deployment, err
 	}
 
@@ -291,12 +299,12 @@ func (p predicateStartedUpdating) Delete(_ event.DeleteEvent) bool {
 
 func (r *ClusterOperatorProgressInsightReconciler) allClusterOperatorsProgressInsightsMapFunc(ctx context.Context, _ client.Object) []reconcile.Request {
 	operators := &openshiftconfigv1.ClusterOperatorList{}
-	if err := r.Client.List(ctx, operators); err != nil {
+	if err := r.List(ctx, operators); err != nil {
 		logf.FromContext(ctx).Error(err, "Failed to list ClusterOperators")
 		return nil
 	}
 
-	var requests []reconcile.Request
+	requests := make([]reconcile.Request, 0, len(operators.Items))
 	for _, operator := range operators.Items {
 		requests = append(requests, reconcile.Request{
 			NamespacedName: client.ObjectKey{Name: operator.Name},
