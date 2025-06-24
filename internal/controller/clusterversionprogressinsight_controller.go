@@ -229,6 +229,9 @@ func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, now metav1.Time)
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=clusterversionprogressinsights,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=clusterversionprogressinsights/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=clusterversionprogressinsights/finalizers,verbs=update
+// +kubebuilder:rbac:groups=openshift.muller.dev,resources=updatehealthinsights,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=openshift.muller.dev,resources=updatehealthinsights/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=openshift.muller.dev,resources=updatehealthinsights/finalizers,verbs=update
 // +kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

@@ -16,6 +16,7 @@ rules:
   - openshift.muller.dev
   resources:
   - clusterversionprogressinsights
+  - updatehealthinsights
   verbs:
   - create
   - delete
@@ -28,12 +29,14 @@ rules:
   - openshift.muller.dev
   resources:
   - clusterversionprogressinsights/finalizers
+  - updatehealthinsights/finalizers
   verbs:
   - update
 - apiGroups:
   - openshift.muller.dev
   resources:
   - clusterversionprogressinsights/status
+  - updatehealthinsights/status
   verbs:
   - get
   - patch
