@@ -88,6 +88,44 @@ func (c *machineConfigPoolSelectorCache) forget(mcpName string) bool {
 	return loaded
 }
 
+type machineConfigVersionCache struct {
+	cache sync.Map
+}
+
+func (c *machineConfigVersionCache) ingest(mc *openshiftmachineconfigurationv1.MachineConfig) (bool, string) {
+	if mcVersion, annotated := mc.Annotations[mco.ReleaseImageVersionAnnotationKey]; annotated && mcVersion != "" {
+		previous, loaded := c.cache.Swap(mc.Name, mcVersion)
+		if !loaded || previous.(string) != mcVersion {
+			var previousStr string
+			if loaded {
+				previousStr = previous.(string)
+			}
+			return true, fmt.Sprintf("version for MachineConfig %s changed from %s from %s", mc.Name, previousStr, mcVersion)
+		} else {
+			return false, ""
+		}
+	}
+
+	_, loaded := c.cache.LoadAndDelete(mc.Name)
+	if loaded {
+		return true, fmt.Sprintf("the previous version for MachineConfig %s deleted as no version can be found now", mc.Name)
+	}
+	return false, ""
+}
+
+func (c *machineConfigVersionCache) forget(name string) bool {
+	_, loaded := c.cache.LoadAndDelete(name)
+	return loaded
+}
+
+func (c *machineConfigVersionCache) versionFor(key string) (string, bool) {
+	v, loaded := c.cache.Load(key)
+	if !loaded {
+		return "", false
+	}
+	return v.(string), true
+}
+
 // NodeProgressInsightReconciler reconciles a NodeProgressInsight object
 type NodeProgressInsightReconciler struct {
 	client.Client
@@ -99,6 +137,10 @@ type NodeProgressInsightReconciler struct {
 
 	// mcpSelectors caches the label selectors converted from the node selectors of the machine config pools by their names.
 	mcpSelectors machineConfigPoolSelectorCache
+
+	// machineConfigVersions caches machine config versions which stores the name of MC as the key
+	// and the release image version as its value retrieved from the annotation of the MC.
+	machineConfigVersions machineConfigVersionCache
 
 	now func() metav1.Time
 }
@@ -125,10 +167,25 @@ func (r *NodeProgressInsightReconciler) initializeMachineConfigPools(ctx context
 	return nil
 }
 
+func (r *NodeProgressInsightReconciler) initializeMachineConfigVersions(ctx context.Context) error {
+	var machineConfigs openshiftmachineconfigurationv1.MachineConfigList
+	if err := r.List(ctx, &machineConfigs, &client.ListOptions{}); err != nil {
+		return err
+	}
+
+	for _, mc := range machineConfigs.Items {
+		r.machineConfigVersions.ingest(&mc)
+	}
+
+	klog.V(2).Infof("Ingested %d machineConfigs in the cache", len(machineConfigs.Items))
+	return nil
+}
+
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=nodeprogressinsights,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=nodeprogressinsights/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=nodeprogressinsights/finalizers,verbs=update
 // +kubebuilder:rbac:groups=machineconfiguration.openshift.io,resources=machineconfigpools,verbs=get;list;watch
+// +kubebuilder:rbac:groups=machineconfiguration.openshift.io,resources=machineconfigs,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -149,7 +206,10 @@ func (r *NodeProgressInsightReconciler) Reconcile(ctx context.Context, req ctrl.
 	// will be corrected on the reconciliation when the caches are warmed up.
 	r.once.Do(func() {
 		if err := r.initializeMachineConfigPools(ctx); err != nil {
-			klog.Errorf("Failed to initialize machineConfigPoolSelectorCache: %v", err)
+			klog.Warningf("Failed to initialize machineConfigPoolSelectorCache: %v", err)
+		}
+		if err := r.initializeMachineConfigVersions(ctx); err != nil {
+			klog.Warningf("Failed to initialize machineConfigVersions: %v", err)
 		}
 	})
 
@@ -219,6 +279,70 @@ func (r *NodeProgressInsightReconciler) handleMachineConfigPool(ctx context.Cont
 	return requests
 }
 
+var mcDeleted = predicate.Funcs{
+	CreateFunc:  func(e event.TypedCreateEvent[client.Object]) bool { return false },
+	UpdateFunc:  func(e event.TypedUpdateEvent[client.Object]) bool { return false },
+	DeleteFunc:  func(e event.TypedDeleteEvent[client.Object]) bool { return true },
+	GenericFunc: func(e event.TypedGenericEvent[client.Object]) bool { return false },
+}
+
+var mcVersionEvents = predicate.Funcs{
+	CreateFunc: func(e event.TypedCreateEvent[client.Object]) bool {
+		_, ok := e.Object.(*openshiftmachineconfigurationv1.MachineConfig)
+		return ok
+	},
+	UpdateFunc: func(e event.TypedUpdateEvent[client.Object]) bool {
+		_, ok := e.ObjectNew.(*openshiftmachineconfigurationv1.MachineConfig)
+		return ok
+	},
+	DeleteFunc:  func(e event.TypedDeleteEvent[client.Object]) bool { return false },
+	GenericFunc: func(e event.TypedGenericEvent[client.Object]) bool { return false },
+}
+
+func (r *NodeProgressInsightReconciler) handleDeletedMachineConfig(ctx context.Context, object client.Object) []reconcile.Request {
+	mc, ok := object.(*openshiftmachineconfigurationv1.MachineConfig)
+	if !ok {
+		klog.Errorf("Object %T is not a MachineConfig", object)
+		return nil
+	}
+
+	if !r.machineConfigVersions.forget(mc.Name) {
+		return nil
+	}
+
+	klog.V(2).Infof("MachineConfig %s deleted, removed from cache", mc.Name)
+
+	requests, err := r.requestsForAllNodes(ctx)
+	if err != nil {
+		klog.Errorf("Failed to get requests for all nodes: %v", err)
+		return nil
+	}
+	return requests
+}
+
+func (r *NodeProgressInsightReconciler) handleMachineConfig(ctx context.Context, object client.Object) []reconcile.Request {
+	mc, ok := object.(*openshiftmachineconfigurationv1.MachineConfig)
+	if !ok {
+		klog.Errorf("Object %T is not a MachineConfig", object)
+		return nil
+	}
+
+	modified, reason := r.machineConfigVersions.ingest(mc)
+	if !modified {
+		return nil
+	}
+
+	klog.V(2).Infof("MachineConfig %s changed: %s", mc.Name, reason)
+
+	requests, err := r.requestsForAllNodes(ctx)
+	if err != nil {
+		klog.Errorf("Failed to get requests for all nodes: %v", err)
+		return nil
+	}
+
+	return requests
+}
+
 func (r *NodeProgressInsightReconciler) requestsForAllNodes(ctx context.Context) ([]reconcile.Request, error) {
 	// Reconcile all NodeProgressInsights as the change in the MachineConfigPool selector can potentially affect all of them.
 	var nodes corev1.NodeList
@@ -248,6 +372,16 @@ func (r *NodeProgressInsightReconciler) SetupWithManager(mgr ctrl.Manager) error
 			&openshiftmachineconfigurationv1.MachineConfigPool{},
 			handler.EnqueueRequestsFromMapFunc(r.handleMachineConfigPool),
 			builder.WithPredicates(mcpSelectorEvents),
+		).
+		Watches(
+			&openshiftmachineconfigurationv1.MachineConfig{},
+			handler.EnqueueRequestsFromMapFunc(r.handleDeletedMachineConfig),
+			builder.WithPredicates(mcDeleted),
+		).
+		Watches(
+			&openshiftmachineconfigurationv1.MachineConfig{},
+			handler.EnqueueRequestsFromMapFunc(r.handleMachineConfig),
+			builder.WithPredicates(mcVersionEvents),
 		).
 		Complete(r)
 }
