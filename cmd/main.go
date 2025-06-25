@@ -56,6 +56,12 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+type controllersConfig struct {
+	enableClusterVersion  bool
+	enableClusterOperator bool
+	enableNode            bool
+}
+
 // nolint:gocyclo
 func main() {
 	var metricsAddr string
@@ -65,6 +71,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var controllers controllersConfig
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -83,6 +90,12 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.BoolVar(&controllers.enableClusterVersion, "enable-cluster-version-controller", true,
+		"Enable the ClusterVersionProgressInsight controller")
+	flag.BoolVar(&controllers.enableClusterOperator, "enable-cluster-operator-controller", true,
+		"Enable the ClusterOperatorProgressInsight controller")
+	flag.BoolVar(&controllers.enableNode, "enable-node-controller", true,
+		"Enable the NodeProgressInsight controller")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -204,20 +217,37 @@ func main() {
 		os.Exit(1)
 	}
 
-	cvInformer := controller.NewClusterVersionProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())
-	if err = cvInformer.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ClusterVersionProgressInsight")
-		os.Exit(1)
+	if controllers.enableClusterVersion {
+		setupLog.Info("Setting up ClusterVersionProgressInsight controller")
+		cvInformer := controller.NewClusterVersionProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())
+		if err = cvInformer.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ClusterVersionProgressInsight")
+			os.Exit(1)
+		}
+	} else {
+		setupLog.Info("ClusterVersionProgressInsight controller disabled")
 	}
-	coInformer := controller.NewClusterOperatorProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())
-	if err = coInformer.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ClusterOperatorProgressInsight")
-		os.Exit(1)
+
+	if controllers.enableClusterOperator {
+		setupLog.Info("Setting up ClusterOperatorProgressInsight controller")
+		coInformer := controller.NewClusterOperatorProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())
+		if err = coInformer.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ClusterOperatorProgressInsight")
+			os.Exit(1)
+		}
+	} else {
+		setupLog.Info("ClusterOperatorProgressInsight controller disabled")
 	}
-	nodeInformer := controller.NewNodeProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())
-	if err = nodeInformer.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "NodeProgressInsight")
-		os.Exit(1)
+
+	if controllers.enableNode {
+		setupLog.Info("Setting up NodeProgressInsight controller")
+		nodeInformer := controller.NewNodeProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())
+		if err = nodeInformer.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "NodeProgressInsight")
+			os.Exit(1)
+		}
+	} else {
+		setupLog.Info("NodeProgressInsight controller disabled")
 	}
 	// +kubebuilder:scaffold:builder
 
