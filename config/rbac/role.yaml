@@ -13,6 +13,15 @@ rules:
   - list
   - watch
 - apiGroups:
+  - machineconfiguration.openshift.io
+  resources:
+  - machineconfigpools
+  - machineconfigs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - openshift.muller.dev
   resources:
   - clusteroperatorprogressinsights

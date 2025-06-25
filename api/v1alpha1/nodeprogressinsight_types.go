@@ -20,8 +20,41 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// NodeStatusInsightConditionType are types of conditions that can be reported on Node status insights
+type NodeStatusInsightConditionType string
+
+//goland:noinspection GoCommentStart
+const (
+	// Updating condition communicates whether the Node is updating
+	NodeStatusInsightUpdating NodeStatusInsightConditionType = "Updating"
+	// Degraded condition communicates whether the Node is degraded (problem observed)
+	NodeStatusInsightDegraded NodeStatusInsightConditionType = "Degraded"
+	// Available condition communicates whether the Node is available (accepting workloads)
+	NodeStatusInsightAvailable NodeStatusInsightConditionType = "Available"
+)
+
+// NodeUpdatingReason are well-known reasons for the Updating condition on Node status insights
+type NodeUpdatingReason string
+
+//goland:noinspection GoCommentStart
+const (
+	// Draining is used with Updating=True when the Node is being drained
+	NodeDraining NodeUpdatingReason = "Draining"
+	// Updating is used with Updating=True when new node configuration is being applied
+	NodeUpdating NodeUpdatingReason = "Updating"
+	// Rebooting is used with Updating=True when the Node is rebooting into the new version
+	NodeRebooting NodeUpdatingReason = "Rebooting"
+
+	// Updated is used with Updating=False when the Node is prevented by configuration from updating
+	NodePaused NodeUpdatingReason = "Paused"
+	// Updated is used with Updating=False when the Node is waiting to be eventually updated
+	NodeUpdatePending NodeUpdatingReason = "Pending"
+	// Updated is used with Updating=False when the Node has been updated
+	NodeCompleted NodeUpdatingReason = "Completed"
+
+	// CannotDetermine is used with Updating=Unknown
+	NodeCannotDetermine NodeUpdatingReason = "CannotDetermine"
+)
 
 // NodeProgressInsightSpec is empty for now, NodeProgressInsightSpec is purely status-reporting API. In the future spec may be used
 // to hold configuration to drive what information is surfaced and how

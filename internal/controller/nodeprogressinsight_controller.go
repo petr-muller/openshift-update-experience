@@ -19,12 +19,16 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
+	"time"
 
+	openshiftconfigv1 "github.com/openshift/api/config/v1"
 	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
-	openshiftv1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
+	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
 	"github.com/petr-muller/openshift-update-experience/internal/mco"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -181,6 +185,196 @@ func (r *NodeProgressInsightReconciler) initializeMachineConfigVersions(ctx cont
 	return nil
 }
 
+func isNodeDegraded(node *corev1.Node) bool {
+	// Inspired by: https://github.com/openshift/machine-config-operator/blob/master/pkg/controller/node/status.go
+	if node.Annotations == nil {
+		return false
+	}
+	dconfig, ok := node.Annotations[mco.DesiredMachineConfigAnnotationKey]
+	if !ok || dconfig == "" {
+		return false
+	}
+	dstate, ok := node.Annotations[mco.MachineConfigDaemonStateAnnotationKey]
+	if !ok || dstate == "" {
+		return false
+	}
+
+	if dstate == mco.MachineConfigDaemonStateDegraded || dstate == mco.MachineConfigDaemonStateUnreconcilable {
+		return true
+	}
+	return false
+}
+
+func toPointer(d time.Duration) *metav1.Duration {
+	v := metav1.Duration{Duration: d}
+	return &v
+}
+func isNodeDraining(node *corev1.Node, isUpdating bool) bool {
+	desiredDrain := node.Annotations[mco.DesiredDrainerAnnotationKey]
+	appliedDrain := node.Annotations[mco.LastAppliedDrainerAnnotationKey]
+
+	if appliedDrain == "" || desiredDrain == "" {
+		return false
+	}
+
+	if desiredDrain != appliedDrain {
+		desiredVerb := strings.Split(desiredDrain, "-")[0]
+		if desiredVerb == mco.DrainerStateDrain {
+			return true
+		}
+	}
+
+	// Node is supposed to be updating but MCD hasn't had the time to update
+	// its state from original `Done` to `Working` and start the drain process.
+	// Default to drain process so that we don't report completed.
+	mcdState := node.Annotations[mco.MachineConfigDaemonStateAnnotationKey]
+	return isUpdating && mcdState == mco.MachineConfigDaemonStateDone
+}
+
+func determineConditions(pool *openshiftmachineconfigurationv1.MachineConfigPool, node *corev1.Node, isUpdating, isUpdated, isUnavailable, isDegraded bool, lns *mco.LayeredNodeState, now metav1.Time) ([]metav1.Condition, string, *metav1.Duration) {
+	var estimate *metav1.Duration
+
+	updating := metav1.Condition{
+		Type:               string(ouev1alpha1.NodeStatusInsightUpdating),
+		Status:             metav1.ConditionUnknown,
+		Reason:             string(ouev1alpha1.NodeCannotDetermine),
+		Message:            "Cannot determine whether the node is updating",
+		LastTransitionTime: now,
+	}
+	available := metav1.Condition{
+		Type:               string(ouev1alpha1.NodeStatusInsightAvailable),
+		Status:             metav1.ConditionTrue,
+		Reason:             "AsExpected",
+		Message:            "The node is available",
+		LastTransitionTime: now,
+	}
+	degraded := metav1.Condition{
+		Type:               string(ouev1alpha1.NodeStatusInsightDegraded),
+		Status:             metav1.ConditionFalse,
+		Reason:             "AsExpected",
+		Message:            "The node is not degraded",
+		LastTransitionTime: now,
+	}
+
+	if isUpdating && isNodeDraining(node, isUpdating) {
+		estimate = toPointer(10 * time.Minute)
+		updating.Status = metav1.ConditionTrue
+		updating.Reason = string(ouev1alpha1.NodeDraining)
+		updating.Message = "The node is draining"
+	} else if isUpdating {
+		state := node.Annotations[mco.MachineConfigDaemonStateAnnotationKey]
+		switch state {
+		case mco.MachineConfigDaemonStateRebooting:
+			estimate = toPointer(10 * time.Minute)
+			updating.Status = metav1.ConditionTrue
+			updating.Reason = string(ouev1alpha1.NodeRebooting)
+			updating.Message = "The node is rebooting"
+		case mco.MachineConfigDaemonStateDone:
+			estimate = toPointer(time.Duration(0))
+			updating.Status = metav1.ConditionFalse
+			updating.Reason = string(ouev1alpha1.NodeCompleted)
+			updating.Message = "The node is updated"
+		default:
+			estimate = toPointer(10 * time.Minute)
+			updating.Status = metav1.ConditionTrue
+			updating.Reason = string(ouev1alpha1.NodeUpdating)
+			updating.Message = "The node is updating"
+		}
+
+	} else if isUpdated {
+		estimate = toPointer(time.Duration(0))
+		updating.Status = metav1.ConditionFalse
+		updating.Reason = string(ouev1alpha1.NodeCompleted)
+		updating.Message = "The node is updated"
+	} else if pool.Spec.Paused {
+		estimate = toPointer(time.Duration(0))
+		updating.Status = metav1.ConditionFalse
+		updating.Reason = string(ouev1alpha1.NodePaused)
+		updating.Message = "The update of the node is paused"
+	} else {
+		updating.Status = metav1.ConditionFalse
+		updating.Reason = string(ouev1alpha1.NodeUpdatePending)
+		updating.Message = "The update of the node is pending"
+	}
+
+	// ATM, the insight's message is set only for the interesting cases: (isUnavailable && !isUpdating) || isDegraded
+	// Moreover, the degraded message overwrites the unavailable one.
+	// Those cases are inherited from the "oc adm upgrade" command as the baseline for the insight's message.
+	// https://github.com/openshift/oc/blob/0cd37758b5ebb182ea911c157256c1b812c216c5/pkg/cli/admin/upgrade/status/workerpool.go#L194
+	// We may add more cases in the future as needed
+	var message string
+	if isUnavailable && !isUpdating {
+		estimate = nil
+		if isUpdated {
+			estimate = toPointer(time.Duration(0))
+		}
+		available.Status = metav1.ConditionFalse
+		available.Reason = lns.GetUnavailableReason()
+		available.Message = lns.GetUnavailableMessage()
+		available.LastTransitionTime = metav1.Time{Time: lns.GetUnavailableSince()}
+		message = available.Message
+	}
+
+	if isDegraded {
+		estimate = nil
+		if isUpdated {
+			estimate = toPointer(time.Duration(0))
+		}
+		degraded.Status = metav1.ConditionTrue
+		degraded.Reason = node.Annotations[mco.MachineConfigDaemonReasonAnnotationKey]
+		degraded.Message = node.Annotations[mco.MachineConfigDaemonReasonAnnotationKey]
+		message = degraded.Message
+	}
+
+	return []metav1.Condition{updating, available, degraded}, message, estimate
+}
+
+func assessNode(node *corev1.Node, mcp *openshiftmachineconfigurationv1.MachineConfigPool, machineConfigToVersion func(string) (string, bool), mostRecentVersionInCVHistory string, now metav1.Time) *ouev1alpha1.NodeProgressInsightStatus {
+	if node == nil || mcp == nil {
+		return nil
+	}
+
+	desiredConfig, ok := node.Annotations[mco.DesiredMachineConfigAnnotationKey]
+	noDesiredOnNode := !ok
+	currentConfig := node.Annotations[mco.CurrentMachineConfigAnnotationKey]
+	currentVersion, foundCurrent := machineConfigToVersion(currentConfig)
+	desiredVersion, foundDesired := machineConfigToVersion(desiredConfig)
+
+	lns := mco.NewLayeredNodeState(node)
+	isUnavailable := lns.IsUnavailable(mcp)
+
+	isDegraded := isNodeDegraded(node)
+	isUpdated := foundCurrent && mostRecentVersionInCVHistory == currentVersion &&
+		// The following condition is to handle the multi-arch migration because the version number stays the same there
+		(noDesiredOnNode || currentConfig == desiredConfig)
+
+	// foundCurrent makes sure we don't blip phase "updating" for nodes that we are not sure
+	// of their actual phase, even though the conservative assumption is that the node is
+	// at least updating or is updated.
+	isUpdating := !isUpdated && foundCurrent && foundDesired && mostRecentVersionInCVHistory == desiredVersion
+
+	conditions, message, estimate := determineConditions(mcp, node, isUpdating, isUpdated, isUnavailable, isDegraded, lns, now)
+
+	scope := ouev1alpha1.WorkerPoolScope
+	if mcp.Name == mco.MachineConfigPoolMaster {
+		scope = ouev1alpha1.ControlPlaneScope
+	}
+
+	return &ouev1alpha1.NodeProgressInsightStatus{
+		Name: node.Name,
+		PoolResource: ouev1alpha1.ResourceRef{
+			Resource: "machineconfigpools",
+			Group:    openshiftmachineconfigurationv1.GroupName,
+			Name:     mcp.Name,
+		},
+		Scope:               scope,
+		Version:             currentVersion,
+		EstimatedToComplete: estimate,
+		Message:             message,
+		Conditions:          conditions,
+	}
+}
+
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=nodeprogressinsights,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=nodeprogressinsights/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=nodeprogressinsights/finalizers,verbs=update
@@ -197,7 +391,7 @@ func (r *NodeProgressInsightReconciler) initializeMachineConfigVersions(ctx cont
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.4/pkg/reconcile
 func (r *NodeProgressInsightReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	logger := logf.FromContext(ctx)
 
 	// Warm up controller's caches.
 	// This has to be called after informers caches have been synced and before the first event comes in.
@@ -213,6 +407,84 @@ func (r *NodeProgressInsightReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	})
 
+	var node corev1.Node
+	nodeErr := r.Get(ctx, req.NamespacedName, &node)
+	nodeNotFound := errors.IsNotFound(nodeErr)
+	if nodeErr != nil && !nodeNotFound {
+		logger.WithValues("Node", req.NamespacedName).Error(nodeErr, "Failed to get Node")
+		return ctrl.Result{}, nodeErr
+	}
+
+	var progressInsight ouev1alpha1.NodeProgressInsight
+	piErr := r.Get(ctx, req.NamespacedName, &progressInsight)
+	progressInsightNotFound := errors.IsNotFound(piErr)
+	if piErr != nil && !progressInsightNotFound {
+		logger.WithValues("NodeProgressInsight", req.NamespacedName).Error(piErr, "Failed to get NodeProgressInsight")
+		return ctrl.Result{}, piErr
+	}
+
+	if nodeNotFound {
+		if progressInsightNotFound {
+			logger.WithValues("NodeProgressInsight", req.NamespacedName).Info("Both Node and NodeProgressInsight do not exist, nothing to do")
+			return ctrl.Result{}, nil
+		} else {
+			logger.WithValues("NodeProgressInsight", req.NamespacedName).Info("Node does not exist, deleting NodeProgressInsight")
+			err := r.Delete(ctx, &progressInsight)
+			if err != nil {
+				logger.Error(err, "Failed to delete NodeProgressInsight")
+			}
+			return ctrl.Result{}, err
+		}
+	}
+
+	mcpName := r.mcpSelectors.whichMCP(labels.Set(node.Labels))
+	if mcpName == "" {
+		// We assume that every node belongs to an MCP at all time.
+		// Although conceptually the assumption might not be true (see https://docs.openshift.com/container-platform/4.17/machine_configuration/index.html#architecture-machine-config-pools_machine-config-overview),
+		// we will wait to hear from our users the issues for cluster updates and will handle them accordingly by then.
+		logger.WithValues("Node", req.NamespacedName).Info("Node does not belong to any MachineConfigPool, skipping reconciliation")
+		return ctrl.Result{}, nil
+	}
+
+	logger.WithValues("Node", req.NamespacedName, "MachineConfigPool", mcpName).V(4).Info("Processing NodeProgressInsight for Node")
+
+	var mcp openshiftmachineconfigurationv1.MachineConfigPool
+	mcpErr := r.Get(ctx, client.ObjectKey{Name: mcpName}, &mcp)
+	if mcpErr != nil {
+		// If the MCP does not exist, it was deleted and its deletion will trigger another reconciliation for all nodes
+		return ctrl.Result{}, client.IgnoreNotFound(mcpErr)
+	}
+
+	var cv openshiftconfigv1.ClusterVersion
+	cvErr := r.Get(ctx, client.ObjectKey{Name: "version"}, &cv)
+	if cvErr != nil {
+		return ctrl.Result{}, cvErr
+	}
+
+	var mostRecentVersionInCVHistory string
+	if len(cv.Status.History) > 0 {
+		mostRecentVersionInCVHistory = cv.Status.History[0].Version
+	}
+
+	now := r.now()
+	nodeInsight := assessNode(&node, &mcp, r.machineConfigVersions.versionFor, mostRecentVersionInCVHistory, now)
+	progressInsight.Status = *nodeInsight
+	progressInsight.Name = node.Name
+
+	if progressInsightNotFound {
+		if err := r.Create(ctx, &progressInsight); err != nil {
+			logger.WithValues("NodeProgressInsight", req.NamespacedName).Error(err, "Failed to create NodeProgressInsight")
+			return ctrl.Result{}, err
+		}
+		logger.WithValues("NodeProgressInsight", req.NamespacedName).Info("Created NodeProgressInsight for Node")
+		return ctrl.Result{}, nil
+	}
+
+	if err := r.Status().Update(ctx, &progressInsight); err != nil {
+		logger.WithValues("NodeProgressInsight", req.NamespacedName).Error(err, "Failed to update NodeProgressInsight status")
+		return ctrl.Result{}, err
+	}
+	logger.WithValues("NodeProgressInsight", req.NamespacedName).Info("Updated NodeProgressInsight status for Node")
 	return ctrl.Result{}, nil
 }
 
@@ -361,7 +633,7 @@ func (r *NodeProgressInsightReconciler) requestsForAllNodes(ctx context.Context)
 // SetupWithManager sets up the controller with the Manager.
 func (r *NodeProgressInsightReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&openshiftv1alpha1.NodeProgressInsight{}).
+		For(&ouev1alpha1.NodeProgressInsight{}).
 		Named("nodeprogressinsight").
 		Watches(
 			&openshiftmachineconfigurationv1.MachineConfigPool{},
