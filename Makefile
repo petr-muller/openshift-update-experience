@@ -138,6 +138,10 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
+.PHONY: build-oc-plugin
+build-plugin: fmt vet ## Build oc-update-status plugin binary.
+	go build -o bin/oc-update-status ./cmd/oc-update-status
+
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
