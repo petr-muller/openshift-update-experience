@@ -32,7 +32,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -67,7 +66,8 @@ func (c *machineConfigPoolSelectorCache) whichMCP(l labels.Labels) string {
 func (c *machineConfigPoolSelectorCache) ingest(pool *openshiftmachineconfigurationv1.MachineConfigPool) (bool, string) {
 	s, err := metav1.LabelSelectorAsSelector(pool.Spec.NodeSelector)
 	if err != nil {
-		klog.Errorf("Failed to convert to a label selector from the node selector of MachineConfigPool %s: %v", pool.Name, err)
+		logger := logf.Log
+		logger.WithValues("MachineConfigPool", pool.Name).Error(err, "Failed to convert node selector to label selector")
 		v, loaded := c.cache.LoadAndDelete(pool.Name)
 		if loaded {
 			return true, fmt.Sprintf("the previous selector %s for MachineConfigPool %s deleted as its current node selector cannot be converted to a label selector: %v", v, pool.Name, err)
@@ -159,29 +159,35 @@ func NewNodeProgressInsightReconciler(client client.Client, scheme *runtime.Sche
 }
 
 func (r *NodeProgressInsightReconciler) initializeMachineConfigPools(ctx context.Context) error {
+	logger := logf.FromContext(ctx)
 	var machineConfigPools openshiftmachineconfigurationv1.MachineConfigPoolList
 	if err := r.List(ctx, &machineConfigPools, &client.ListOptions{}); err != nil {
 		return err
 	}
 
+	logger.WithValues("MachineConfigPools", len(machineConfigPools.Items)).Info("Ingesting MachineConfigPools to cache OCP versions")
 	for _, pool := range machineConfigPools.Items {
-		r.mcpSelectors.ingest(&pool)
+		if ingested, message := r.mcpSelectors.ingest(&pool); ingested {
+			logger.WithValues("MachineConfigPool", pool.Name).Info(message)
+		}
 	}
-	klog.V(2).Infof("Ingested %d machineConfigPools in the cache", len(machineConfigPools.Items))
 	return nil
 }
 
 func (r *NodeProgressInsightReconciler) initializeMachineConfigVersions(ctx context.Context) error {
+	logger := logf.FromContext(ctx)
 	var machineConfigs openshiftmachineconfigurationv1.MachineConfigList
 	if err := r.List(ctx, &machineConfigs, &client.ListOptions{}); err != nil {
 		return err
 	}
+	logger.WithValues("MachineConfigs", len(machineConfigs.Items)).Info("Ingesting MachineConfigs to cache OCP versions")
 
 	for _, mc := range machineConfigs.Items {
-		r.machineConfigVersions.ingest(&mc)
+		if ingested, message := r.machineConfigVersions.ingest(&mc); ingested {
+			logger.WithValues("MachineConfig", mc.Name).Info(message)
+		}
 	}
 
-	klog.V(2).Infof("Ingested %d machineConfigs in the cache", len(machineConfigs.Items))
 	return nil
 }
 
@@ -400,10 +406,10 @@ func (r *NodeProgressInsightReconciler) Reconcile(ctx context.Context, req ctrl.
 	// will be corrected on the reconciliation when the caches are warmed up.
 	r.once.Do(func() {
 		if err := r.initializeMachineConfigPools(ctx); err != nil {
-			klog.Warningf("Failed to initialize machineConfigPoolSelectorCache: %v", err)
+			logger.Error(err, "Failed to initialize machineConfigPoolSelectorCache")
 		}
 		if err := r.initializeMachineConfigVersions(ctx); err != nil {
-			klog.Warningf("Failed to initialize machineConfigVersions: %v", err)
+			logger.Error(err, "Failed to initialize machineConfigVersions")
 		}
 	})
 
@@ -509,9 +515,10 @@ var mcpSelectorEvents = predicate.Funcs{
 }
 
 func (r *NodeProgressInsightReconciler) handleDeletedMachineConfigPool(ctx context.Context, object client.Object) []reconcile.Request {
+	logger := logf.FromContext(ctx)
 	pool, ok := object.(*openshiftmachineconfigurationv1.MachineConfigPool)
 	if !ok {
-		klog.Errorf("Object %T is not a MachineConfigPool", object)
+		logger.Error(fmt.Errorf("object %T is not a MachineConfigPool", object), "Failed to handle deleted MachineConfigPool")
 		return nil
 	}
 
@@ -519,20 +526,21 @@ func (r *NodeProgressInsightReconciler) handleDeletedMachineConfigPool(ctx conte
 		return nil
 	}
 
-	klog.V(2).Infof("MachineConfigPool %s deleted, removed from cache", pool.Name)
+	logger.WithValues("MachineConfigPool", pool.Name).Info("MachineConfigPool deleted, removing from cache")
 
 	requests, err := r.requestsForAllNodes(ctx)
 	if err != nil {
-		klog.Errorf("Failed to get requests for all nodes: %v", err)
+		logger.WithValues("MachineConfigPool", pool.Name).Error(err, "Failed to get requests for all nodes")
 		return nil
 	}
 	return requests
 }
 
 func (r *NodeProgressInsightReconciler) handleMachineConfigPool(ctx context.Context, object client.Object) []reconcile.Request {
+	logger := logf.FromContext(ctx)
 	pool, ok := object.(*openshiftmachineconfigurationv1.MachineConfigPool)
 	if !ok {
-		klog.Errorf("Object %T is not a MachineConfigPool", object)
+		logger.Error(fmt.Errorf("object %T is not a MachineConfigPool", object), "Failed to handle MachineConfigPool")
 		return nil
 	}
 
@@ -541,11 +549,11 @@ func (r *NodeProgressInsightReconciler) handleMachineConfigPool(ctx context.Cont
 		return []reconcile.Request{}
 	}
 
-	klog.V(2).Infof("MachineConfigPool %s changed: %s", pool.Name, reason)
+	logger.WithValues("MachineConfigPool", pool.Name).Info("MachineConfigPool changed:", "reason", reason)
 
 	requests, err := r.requestsForAllNodes(ctx)
 	if err != nil {
-		klog.Errorf("Failed to get requests for all nodes: %v", err)
+		logger.WithValues("MachineConfigPool", pool.Name).Error(err, "Failed to get requests for all nodes")
 		return nil
 	}
 	return requests
@@ -572,9 +580,10 @@ var mcVersionEvents = predicate.Funcs{
 }
 
 func (r *NodeProgressInsightReconciler) handleDeletedMachineConfig(ctx context.Context, object client.Object) []reconcile.Request {
+	logger := logf.FromContext(ctx)
 	mc, ok := object.(*openshiftmachineconfigurationv1.MachineConfig)
 	if !ok {
-		klog.Errorf("Object %T is not a MachineConfig", object)
+		logger.Error(fmt.Errorf("object %T is not a MachineConfig", object), "Failed to handle deleted MachineConfig")
 		return nil
 	}
 
@@ -582,20 +591,21 @@ func (r *NodeProgressInsightReconciler) handleDeletedMachineConfig(ctx context.C
 		return nil
 	}
 
-	klog.V(2).Infof("MachineConfig %s deleted, removed from cache", mc.Name)
+	logger.WithValues("MachineConfig", mc.Name).Info("MachineConfig deleted, removing from cache")
 
 	requests, err := r.requestsForAllNodes(ctx)
 	if err != nil {
-		klog.Errorf("Failed to get requests for all nodes: %v", err)
+		logger.WithValues("MachineConfig", mc.Name).Error(err, "Failed to get requests for all nodes")
 		return nil
 	}
 	return requests
 }
 
 func (r *NodeProgressInsightReconciler) handleMachineConfig(ctx context.Context, object client.Object) []reconcile.Request {
+	logger := logf.FromContext(ctx)
 	mc, ok := object.(*openshiftmachineconfigurationv1.MachineConfig)
 	if !ok {
-		klog.Errorf("Object %T is not a MachineConfig", object)
+		logger.Error(fmt.Errorf("object %T is not a MachineConfig", object), "Failed to handle MachineConfig")
 		return nil
 	}
 
@@ -604,11 +614,11 @@ func (r *NodeProgressInsightReconciler) handleMachineConfig(ctx context.Context,
 		return nil
 	}
 
-	klog.V(2).Infof("MachineConfig %s changed: %s", mc.Name, reason)
+	logger.WithValues("MachineConfig", mc.Name).Info("MachineConfig changed:", "reason", reason)
 
 	requests, err := r.requestsForAllNodes(ctx)
 	if err != nil {
-		klog.Errorf("Failed to get requests for all nodes: %v", err)
+		logger.WithValues("MachineConfig", mc.Name).Error(err, "Failed to get requests for all nodes")
 		return nil
 	}
 
