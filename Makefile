@@ -146,6 +146,18 @@ build-plugin: fmt vet ## Build oc-update-status plugin binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
 
+.PHONY: run-only-cv
+run-only-cv: manifests generate fmt vet
+	go run ./cmd/main.go --enable-cluster-version-controller=true --enable-cluster-operator-controller=false --enable-node-controller=false
+
+.PHONY: run-only-co
+run-only-co: manifests generate fmt vet
+	go run ./cmd/main.go --enable-cluster-version-controller=false --enable-cluster-operator-controller=true --enable-node-controller=false
+
+.PHONY: run-only-node
+run-only-node: manifests generate fmt vet
+	go run ./cmd/main.go --enable-cluster-version-controller=false --enable-cluster-operator-controller=false --enable-node-controller=true
+
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
