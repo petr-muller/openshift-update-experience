@@ -24,8 +24,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/errors"
@@ -202,8 +204,7 @@ func forcedHealthInsight(cv *openshiftconfigv1.ClusterVersion, now metav1.Time) 
 // It does not take previous status insight into account. Many fields of the status insights (such as completion) cannot
 // be properly calculated without also watching and processing ClusterOperators, so that functionality will need to be
 // added later.
-func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, now metav1.Time) (*ouev1alpha1.ClusterVersionProgressInsightStatus, []*ouev1alpha1.UpdateHealthInsightStatus) {
-
+func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, previous *ouev1alpha1.ClusterVersionProgressInsight) (*ouev1alpha1.ClusterVersionProgressInsightStatus, []*ouev1alpha1.UpdateHealthInsightStatus) {
 	var lastHistoryItem *openshiftconfigv1.UpdateHistory
 	if len(cv.Status.History) > 0 {
 		lastHistoryItem = &cv.Status.History[0]
@@ -211,7 +212,6 @@ func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, now metav1.Time)
 	cvProgressing := findOperatorStatusCondition(cv.Status.Conditions, openshiftconfigv1.OperatorProgressing)
 
 	updating, startedAt, completedAt := isControlPlaneUpdating(cvProgressing, lastHistoryItem)
-	updating.LastTransitionTime = now
 
 	klog.V(2).Infof("CPI :: CV/%s :: Updating=%s Started=%s Completed=%s", cv.Name, updating.Status, startedAt, completedAt)
 
@@ -237,8 +237,12 @@ func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, now metav1.Time)
 		Versions:   versionsFromHistory(cv.Status.History),
 		Completion: completion,
 		StartedAt:  startedAt,
-		Conditions: []metav1.Condition{updating},
 	}
+
+	if oldUpdating := meta.FindStatusCondition(previous.Status.Conditions, updating.Type); oldUpdating != nil {
+		insight.Conditions = append(insight.Conditions, *oldUpdating)
+	}
+	meta.SetStatusCondition(&insight.Conditions, updating)
 
 	if !completedAt.IsZero() {
 		insight.CompletedAt = &completedAt
@@ -249,7 +253,7 @@ func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, now metav1.Time)
 	}
 
 	var healthInsights []*ouev1alpha1.UpdateHealthInsightStatus
-	if forcedHealthInsight := forcedHealthInsight(cv, now); forcedHealthInsight != nil {
+	if forcedHealthInsight := forcedHealthInsight(cv, metav1.Now()); forcedHealthInsight != nil {
 		healthInsights = append(healthInsights, forcedHealthInsight)
 	}
 
@@ -398,8 +402,7 @@ func (r *ClusterVersionProgressInsightReconciler) Reconcile(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
-	now := r.now()
-	cvInsight, healthInsights := assessClusterVersion(&clusterVersion, now)
+	cvInsight, healthInsights := assessClusterVersion(&clusterVersion, &progressInsight)
 	progressInsight.Status = *cvInsight
 	progressInsight.Name = clusterVersion.Name
 
