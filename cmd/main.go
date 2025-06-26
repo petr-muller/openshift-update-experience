@@ -23,6 +23,8 @@ import (
 	"path/filepath"
 
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
+	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -53,6 +55,7 @@ func init() {
 
 	utilruntime.Must(openshiftv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(openshiftconfigv1.AddToScheme(scheme))
+	utilruntime.Must(openshiftmachineconfigurationv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
