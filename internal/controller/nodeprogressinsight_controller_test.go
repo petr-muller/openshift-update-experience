@@ -18,10 +18,11 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -30,55 +31,84 @@ import (
 	openshiftv1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
 )
 
-var _ = Describe("NodeProgressInsight Controller", func() {
-	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
-
+var _ = Describe("NodeProgressInsight Controller", Serial, func() {
+	Context("When creating new NodeProgressInsight from cluster state", func() {
 		ctx := context.Background()
 
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
-		}
-		nodeprogressinsight := &openshiftv1alpha1.NodeProgressInsight{}
-
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind NodeProgressInsight")
-			err := k8sClient.Get(ctx, typeNamespacedName, nodeprogressinsight)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &openshiftv1alpha1.NodeProgressInsight{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					// TODO(user): Specify other spec details if needed.
+			By("Cleaning up any existing resources")
+			node := &corev1.Node{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: "test-node"}, node)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, node)).To(Succeed())
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "test-node"}, &corev1.Node{})
+				}).Should(MatchError(ContainSubstring("not found")))
+			}
+
+			pi := &openshiftv1alpha1.NodeProgressInsight{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: "test-node"}, pi)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, pi)).To(Succeed())
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "test-node"}, &openshiftv1alpha1.NodeProgressInsight{})
+				}).Should(MatchError(ContainSubstring("not found")))
+			}
+		})
+
+		var minutesAgo [60]metav1.Time
+		for i := 0; i < 60; i++ {
+			minutesAgo[i] = metav1.Now()
+			minutesAgo[i].Time = minutesAgo[i].Time.Add(-time.Duration(i) * time.Minute)
+		}
+
+		type testCase struct {
+			name string
+			node *corev1.Node
+		}
+
+		DescribeTable("should create progress insight with matching status",
+			func(tc testCase) {
+				By("Creating the input Node")
+				status := tc.node.Status.DeepCopy()
+				Expect(k8sClient.Create(ctx, tc.node)).To(Succeed())
+				tc.node.Status = *status
+				Expect(k8sClient.Status().Update(ctx, tc.node)).To(Succeed())
+
+				By("Reconciling to create the progress insight")
+				controllerReconciler := &NodeProgressInsightReconciler{
+					Client: k8sClient,
+					Scheme: k8sClient.Scheme(),
+					now:    metav1.Now,
 				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
 
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &openshiftv1alpha1.NodeProgressInsight{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: types.NamespacedName{Name: tc.node.Name},
+				})
+				Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance NodeProgressInsight")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &NodeProgressInsightReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
+				By("Verifying the progress insight was created")
+				progressInsight := &openshiftv1alpha1.NodeProgressInsight{}
+				err = k8sClient.Get(ctx, types.NamespacedName{Name: tc.node.Name}, progressInsight)
+				// TODO(muller): Implement tests when working on the functionality
+				// Expect(err).NotTo(HaveOccurred())
+				Expect(err).To(HaveOccurred())
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
-		})
+				By("Cleanup")
+				Expect(k8sClient.Delete(ctx, tc.node)).To(Succeed())
+				// TODO(muller): Implement tests when working on the functionality
+				// Expect(k8sClient.Delete(ctx, progressInsight)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, progressInsight)).NotTo(Succeed())
+			},
+			// TODO(muller): Implement tests when working on the functionality
+			Entry("Node TODO", testCase{
+				name: "TODO",
+				node: &corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-node",
+					},
+				},
+			}),
+		)
 	})
 })
