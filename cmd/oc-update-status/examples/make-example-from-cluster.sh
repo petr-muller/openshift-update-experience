@@ -13,11 +13,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 EXAMPLE_DIR="$REPO_ROOT/cmd/oc-update-status/examples/$EXAMPLE_NAME"
 
-if [ -d "$EXAMPLE_DIR" ]; then
-    echo "Error: Example directory '$EXAMPLE_DIR' already exists" >&2
-    exit 1
-fi
-
 echo "Creating example '$EXAMPLE_NAME' in $EXAMPLE_DIR"
 mkdir -p "$EXAMPLE_DIR"
 
@@ -34,4 +29,4 @@ echo "  - cv-insights.yaml (ClusterVersionProgressInsights)"
 echo ""
 echo "You can now test this example with:"
 echo "  cd $REPO_ROOT"
-echo "  go run ./cmd/oc-update-status --mock-data=$EXAMPLE_DIR",
+echo "  go run ./cmd/oc-update-status --mocks=$EXAMPLE_DIR"
