@@ -356,6 +356,16 @@ catalog-build: opm ## Build a catalog image.
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
 
+##@ Examples
+
+.PHONY: new-example
+new-example: ## Create a new example from live cluster data. Usage: make new-example EXAMPLE=<name>
+ifndef EXAMPLE
+	@echo "Error: EXAMPLE variable must be set. Usage: make new-example EXAMPLE=<name>" >&2
+	@exit 1
+endif
+	@./cmd/oc-update-status/examples/make-example-from-cluster.sh $(EXAMPLE)
+
 # Update external CRDs used in tests
 .PHONY: fetch-external-crds
 fetch-external-crds:
