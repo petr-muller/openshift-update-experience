@@ -8,6 +8,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -132,6 +134,32 @@ func (o *options) Run(ctx context.Context) error {
 	cvInsights, err := o.ClusterVersionProgressInsights(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get ClusterVersion insights: %w", err)
+	}
+
+	var cvInsight *ouev1alpha1.ClusterVersionProgressInsight
+	for i := range cvInsights.Items {
+		if cvInsights.Items[i].Name == "version" {
+			cvInsight = &cvInsights.Items[i]
+			break
+		}
+	}
+
+	if cvInsight == nil {
+		return fmt.Errorf("failed to find ClusterVersionProgressInsight with name 'version'")
+	}
+
+	var isControlPlaneUpdating bool
+	if cvUpdating := meta.FindStatusCondition(cvInsight.Status.Conditions, string(ouev1alpha1.ClusterVersionProgressInsightUpdating)); cvUpdating == nil {
+		return fmt.Errorf("ClusterVersionProgressInsight does not have 'Updating' condition")
+	} else {
+		isControlPlaneUpdating = cvUpdating.Status == metav1.ConditionTrue
+	}
+
+	// TODO(muller): Enable as I am adding Node/MCP functionality to the plugin.
+	// if !(isControlPlaneUpdating || hasOutdatedWorkerPool) {
+	if !isControlPlaneUpdating {
+		fmt.Fprintf(o.Out, "The cluster is not updating.\n")
+		return nil
 	}
 
 	// TODO(muller): Enable as I am adding functionality to the plugin.
