@@ -151,16 +151,16 @@ func (o *options) Run(ctx context.Context) error {
 	// 	return fmt.Errorf("failed to get UpdateHealth insights: %w", err)
 	// }
 
-	return printTable(&cvInsights)
+	return o.printTable(&cvInsights)
 }
 
-func printTable(
+func (o *options) printTable(
 	cvInsights *ouev1alpha1.ClusterVersionProgressInsightList,
 ) error {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(o.Out, 0, 0, 2, ' ', 0)
 	defer func() {
 		if err := w.Flush(); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Warning: failed to flush output: %v\n", err)
+			_, _ = fmt.Fprintf(o.ErrOut, "Warning: failed to flush output: %v\n", err)
 		}
 	}()
 
@@ -252,7 +252,7 @@ func printTable(
 func main() {
 	cmd := New()
 	if err := cmd.Execute(); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
