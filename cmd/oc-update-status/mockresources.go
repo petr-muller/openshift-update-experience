@@ -40,11 +40,14 @@ func asResourceList[T any](objects *corev1.List, decoder runtime.Decoder) ([]T, 
 func (o *mockData) load() error {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
+	if err := corev1.AddToScheme(scheme); err != nil {
+		return err
+	}
 	if err := ouev1alpha1.AddToScheme(scheme); err != nil {
 		return err
 	}
 
-	decoder := codecs.UniversalDecoder(ouev1alpha1.GroupVersion)
+	decoder := codecs.UniversalDecoder(corev1.SchemeGroupVersion, ouev1alpha1.GroupVersion)
 
 	if err := o.loadClusterVersionInsights(decoder); err != nil {
 		return fmt.Errorf("failed to load ClusterVersion insights: %w", err)
