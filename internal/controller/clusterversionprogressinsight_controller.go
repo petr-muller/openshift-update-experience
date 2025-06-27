@@ -405,23 +405,28 @@ func (r *ClusterVersionProgressInsightReconciler) Reconcile(ctx context.Context,
 	}
 
 	cvInsight, healthInsights := assessClusterVersion(&clusterVersion, &progressInsight)
-	diff := cmp.Diff(&progressInsight.Status, cvInsight)
-	progressInsight.Status = *cvInsight
 
 	if apierrors.IsNotFound(err) {
 		if err := r.Create(ctx, &progressInsight); err != nil {
 			logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Error(err, "Failed to create ClusterVersionProgressInsight")
 			return ctrl.Result{}, err
 		}
+		progressInsight.Status = *cvInsight
+		if err := r.Status().Update(ctx, &progressInsight); err != nil {
+			logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Error(err, "Failed to update ClusterVersionProgressInsight status")
+			return ctrl.Result{}, err
+		}
 		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Info("Created ClusterVersionProgressInsight")
 		return ctrl.Result{}, r.reconcileHealthInsights(ctx, &progressInsight, healthInsights)
 	}
 
+	diff := cmp.Diff(&progressInsight.Status, cvInsight)
 	if diff == "" {
 		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Info("No changes in ClusterVersionProgressInsight, skipping update")
 		return ctrl.Result{}, nil
 	}
 	logger.Info(diff)
+	progressInsight.Status = *cvInsight
 	if err := r.Client.Status().Update(ctx, &progressInsight); err != nil {
 		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Error(err, "Failed to update ClusterVersionProgressInsight status")
 		return ctrl.Result{}, err
