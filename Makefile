@@ -371,3 +371,5 @@ endif
 fetch-external-crds:
 	curl -L https://raw.githubusercontent.com/openshift/api/refs/heads/master/config/v1/zz_generated.crd-manifests/0000_00_cluster-version-operator_01_clusterversions-Default.crd.yaml -o test/external-crds/ClusterVersion.crd.yaml
 	curl -L https://raw.githubusercontent.com/openshift/api/refs/heads/master/config/v1/zz_generated.crd-manifests/0000_00_cluster-version-operator_01_clusteroperators.crd.yaml -o test/external-crds/ClusterOperator.crd.yaml
+	curl -L https://raw.githubusercontent.com/openshift/api/refs/heads/master/machineconfiguration/v1/zz_generated.crd-manifests/0000_80_machine-config_01_machineconfigpools.crd.yaml -o test/external-crds/MachineConfigPool.crd.yaml
+	curl -L https://raw.githubusercontent.com/openshift/api/refs/heads/master/machineconfiguration/v1/zz_generated.crd-manifests/0000_80_machine-config_01_machineconfigs.crd.yaml -o test/external-crds/MachineConfig.crd.yaml
