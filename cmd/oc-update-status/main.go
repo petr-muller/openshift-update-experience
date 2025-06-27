@@ -37,7 +37,8 @@ func (o *options) Complete(cmd *cobra.Command, args []string) error {
 	}
 
 	if !sets.New[string](detailedOutputAllValues...).Has(o.detailedOutput) {
-		return fmt.Errorf("invalid value for --details: %s (must be one of %s)", o.detailedOutput, strings.Join(detailedOutputAllValues, ", "))
+		return fmt.Errorf("invalid value for --details: %s (must be one of %s)",
+			o.detailedOutput, strings.Join(detailedOutputAllValues, ", "))
 	}
 
 	if o.mockData.path != "" {
@@ -65,7 +66,10 @@ const (
 	detailedOutputOperators = "operators"
 )
 
-var detailedOutputAllValues = []string{detailedOutputNone, detailedOutputAll, detailedOutputNodes, detailedOutputHealth, detailedOutputOperators}
+var detailedOutputAllValues = []string{
+	detailedOutputNone, detailedOutputAll, detailedOutputNodes,
+	detailedOutputHealth, detailedOutputOperators,
+}
 
 func New() *cobra.Command {
 	o := &options{
@@ -82,13 +86,16 @@ func New() *cobra.Command {
 	}
 
 	flags := cmd.Flags()
-	flags.StringVar(&o.mockData.path, "mocks", "", "Path to a directory with insight manifests data to be used instead of a cluster, used for testing purposes")
-	flags.StringVar(&o.detailedOutput, "details", "none", fmt.Sprintf("Show detailed output in selected section. One of: %s", strings.Join(detailedOutputAllValues, ", ")))
+	flags.StringVar(&o.mockData.path, "mocks", "",
+		"Path to a directory with insight manifests data to be used instead of a cluster, used for testing purposes")
+	flags.StringVar(&o.detailedOutput, "details", "none",
+		fmt.Sprintf("Show detailed output in selected section. One of: %s", strings.Join(detailedOutputAllValues, ", ")))
 
 	return cmd
 }
 
-func (o *options) ClusterVersionProgressInsights(ctx context.Context) (ouev1alpha1.ClusterVersionProgressInsightList, error) {
+func (o *options) ClusterVersionProgressInsights(ctx context.Context) (
+	ouev1alpha1.ClusterVersionProgressInsightList, error) {
 	if o.mockData.path != "" {
 		return o.mockData.cvInsights, nil
 	}
@@ -100,7 +107,8 @@ func (o *options) ClusterVersionProgressInsights(ctx context.Context) (ouev1alph
 
 // TODO(muller): Enable as I am adding functionality to the plugin.
 
-// func (o *options) ClusterOperatorProgressInsights(ctx context.Context) (ouev1alpha1.ClusterOperatorProgressInsightList, error) {
+// func (o *options) ClusterOperatorProgressInsights(ctx context.Context) (
+//	ouev1alpha1.ClusterOperatorProgressInsightList, error) {
 // 	if o.mockData.path != "" {
 // 		return o.mockData.coInsights, nil
 // 	}
@@ -149,7 +157,8 @@ func (o *options) Run(ctx context.Context) error {
 	}
 
 	var isControlPlaneUpdating bool
-	if cvUpdating := meta.FindStatusCondition(cvInsight.Status.Conditions, string(ouev1alpha1.ClusterVersionProgressInsightUpdating)); cvUpdating == nil {
+	if cvUpdating := meta.FindStatusCondition(cvInsight.Status.Conditions,
+		string(ouev1alpha1.ClusterVersionProgressInsightUpdating)); cvUpdating == nil {
 		return fmt.Errorf("ClusterVersionProgressInsight does not have 'Updating' condition")
 	} else {
 		isControlPlaneUpdating = cvUpdating.Status == metav1.ConditionTrue
@@ -158,7 +167,9 @@ func (o *options) Run(ctx context.Context) error {
 	// TODO(muller): Enable as I am adding Node/MCP functionality to the plugin.
 	// if !(isControlPlaneUpdating || hasOutdatedWorkerPool) {
 	if !isControlPlaneUpdating {
-		fmt.Fprintf(o.Out, "The cluster is not updating.\n")
+		if _, err := fmt.Fprintf(o.Out, "The cluster is not updating.\n"); err != nil {
+			return fmt.Errorf("failed to write output: %w", err)
+		}
 		return nil
 	}
 

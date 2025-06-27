@@ -22,7 +22,7 @@ type mockData struct {
 }
 
 func asResourceList[T any](objects *corev1.List, decoder runtime.Decoder) ([]T, error) {
-	var outputItems []T
+	outputItems := make([]T, 0, len(objects.Items))
 	for i, item := range objects.Items {
 		obj, err := runtime.Decode(decoder, item.Raw)
 		if err != nil {

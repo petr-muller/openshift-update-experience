@@ -27,7 +27,9 @@ func compareWithFixture(t *testing.T, actualOut []byte, fixtureDir string, outpu
 		if !os.IsNotExist(err) {
 			t.Fatalf("Error when reading output fixture: %v", err)
 		} else {
-			t.Fatalf("Output file %s does not exist. You may rerun this test with UPDATE=true to create output file with the following actual output:\n%s", expectedOutPath, actualOut)
+			t.Fatalf("Output file %s does not exist. "+
+				"You may rerun this test with UPDATE=true to create output file with the following actual output:\n%s",
+				expectedOutPath, actualOut)
 		}
 	}
 

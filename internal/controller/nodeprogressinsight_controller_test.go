@@ -57,9 +57,9 @@ var _ = Describe("NodeProgressInsight Controller", Serial, func() {
 		})
 
 		var minutesAgo [60]metav1.Time
+		now := metav1.Now()
 		for i := 0; i < 60; i++ {
-			minutesAgo[i] = metav1.Now()
-			minutesAgo[i].Time = minutesAgo[i].Time.Add(-time.Duration(i) * time.Minute)
+			minutesAgo[i] = metav1.Time{Time: now.Add(-time.Duration(i) * time.Minute)}
 		}
 
 		type testCase struct {
