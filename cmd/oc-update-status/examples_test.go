@@ -60,6 +60,14 @@ func TestExamples(t *testing.T) {
 	}
 
 	for _, example := range examples {
+		// Skip everything that is not a directory
+		info, err := os.Stat(example)
+		if err != nil {
+			t.Fatalf("Error when getting info for example %s: %v", example, err)
+		}
+		if !info.IsDir() {
+			continue
+		}
 		for _, variant := range variants {
 			t.Run(fmt.Sprintf("%s-%s", example, variant.name), func(t *testing.T) {
 				t.Parallel()

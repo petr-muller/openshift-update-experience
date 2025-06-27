@@ -370,3 +370,4 @@ endif
 .PHONY: fetch-external-crds
 fetch-external-crds:
 	curl -L https://raw.githubusercontent.com/openshift/api/refs/heads/master/config/v1/zz_generated.crd-manifests/0000_00_cluster-version-operator_01_clusterversions-Default.crd.yaml -o test/external-crds/ClusterVersion.crd.yaml
+	curl -L https://raw.githubusercontent.com/openshift/api/refs/heads/master/config/v1/zz_generated.crd-manifests/0000_00_cluster-version-operator_01_clusteroperators.crd.yaml -o test/external-crds/ClusterOperator.crd.yaml
