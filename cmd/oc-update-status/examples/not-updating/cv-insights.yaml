@@ -1,0 +1,33 @@
+apiVersion: v1
+items:
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterVersionProgressInsight
+  metadata:
+    creationTimestamp: "2025-06-27T14:30:17Z"
+    generation: 1
+    name: version
+    resourceVersion: "50028"
+    uid: ea823032-b6bf-4972-ae9f-30734cbf8188
+  spec: {}
+  status:
+    assessment: Completed
+    completedAt: "2025-06-27T13:10:41Z"
+    completionPercent: 100
+    conditions:
+    - lastTransitionTime: "2025-06-27T14:30:17Z"
+      message: ClusterVersion has Progressing=False(Reason=) | Message='Cluster version
+        is 4.20.0-0.nightly-2025-06-20-214016'
+      reason: NotProgressing
+      status: "False"
+      type: Updating
+    estimatedCompletedAt: "2025-06-27T13:44:26Z"
+    name: version
+    startedAt: "2025-06-27T12:44:26Z"
+    versions:
+      target:
+        metadata:
+        - key: Installation
+        version: 4.20.0-0.nightly-2025-06-20-214016
+kind: List
+metadata:
+  resourceVersion: ""
