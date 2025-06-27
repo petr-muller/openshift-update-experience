@@ -47,8 +47,6 @@ import (
 type ClusterVersionProgressInsightReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-
-	now func() metav1.Time
 }
 
 // NewClusterVersionProgressInsightReconciler creates a new ClusterVersionProgressInsightReconciler with the given client and scheme.
@@ -56,7 +54,6 @@ func NewClusterVersionProgressInsightReconciler(client client.Client, scheme *ru
 	return &ClusterVersionProgressInsightReconciler{
 		Client: client,
 		Scheme: scheme,
-		now:    metav1.Now,
 	}
 }
 
@@ -98,7 +95,7 @@ func cvProgressingToUpdating(cvProgressing openshiftconfigv1.ClusterOperatorStat
 
 // isControlPlaneUpdating determines whether the control plane is updating based on the ClusterVersion's Progressing
 // condition and the last history item. It returns an updating condition, the time the update started, and the time the
-// update completed. If the updating condition cannot be determined, the condition will have Status=Unknown and the
+// update is completed. If the updating condition cannot be determined, the condition will have Status=Unknown and the
 // Reason and Message fields will explain why.
 func isControlPlaneUpdating(cvProgressing *openshiftconfigv1.ClusterOperatorStatusCondition, lastHistoryItem *openshiftconfigv1.UpdateHistory) (metav1.Condition, metav1.Time, metav1.Time) {
 	updating := metav1.Condition{
@@ -117,7 +114,7 @@ func isControlPlaneUpdating(cvProgressing *openshiftconfigv1.ClusterOperatorStat
 	updating.Status, updating.Reason, updating.Message = cvProgressingToUpdating(*cvProgressing)
 
 	var started metav1.Time
-	// Looks like we are updating
+	// It looks like we are updating
 	if cvProgressing.Status == openshiftconfigv1.ConditionTrue {
 		if lastHistoryItem.State != openshiftconfigv1.PartialUpdate {
 			setCannotDetermineUpdating(&updating, "Progressing=True in ClusterVersion but last history item is not Partial")
@@ -129,7 +126,7 @@ func isControlPlaneUpdating(cvProgressing *openshiftconfigv1.ClusterOperatorStat
 	}
 
 	var completed metav1.Time
-	// Looks like we are not updating
+	// It looks like we are not updating
 	if cvProgressing.Status == openshiftconfigv1.ConditionFalse {
 		if lastHistoryItem.State != openshiftconfigv1.CompletedUpdate {
 			setCannotDetermineUpdating(&updating, "Progressing=False in ClusterVersion but last history item is not completed")
@@ -437,15 +434,22 @@ func (r *ClusterVersionProgressInsightReconciler) Reconcile(ctx context.Context,
 
 const (
 	labelUpdateHealthInsightManager = "oue.openshift.muller.dev/update-health-insight-manager"
+	controllerName                  = "clusterversionprogressinsight"
 )
+
+func predicateForHealthInsightsManagedBy(controller string) predicate.Funcs {
+	return predicate.NewPredicateFuncs(func(o client.Object) bool {
+		return o.GetLabels()[labelUpdateHealthInsightManager] == controller
+	})
+}
+
+var healthInsightsManagedByClusterVersionProgressInsight = predicateForHealthInsightsManagedBy(controllerName)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterVersionProgressInsightReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ouev1alpha1.ClusterVersionProgressInsight{}).
-		Owns(&ouev1alpha1.UpdateHealthInsight{}, builder.WithPredicates(predicate.NewPredicateFuncs(func(o client.Object) bool {
-			return o.GetLabels()[labelUpdateHealthInsightManager] == "clusterversion"
-		}))).
+		Owns(&ouev1alpha1.UpdateHealthInsight{}, builder.WithPredicates(healthInsightsManagedByClusterVersionProgressInsight)).
 		Named("clusterversionprogressinsight").
 		Watches(
 			&openshiftconfigv1.ClusterVersion{},

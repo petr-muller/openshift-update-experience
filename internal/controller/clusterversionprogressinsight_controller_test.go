@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -26,6 +27,7 @@ import (
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -159,3 +161,63 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 		)
 	})
 })
+
+func Test_UpdateHealthInsightPredicate(t *testing.T) {
+	testCases := []struct {
+		name     string
+		labels   map[string]string
+		expected bool
+	}{
+		{
+			name:     "UpdateHealthInsight without manager label",
+			labels:   map[string]string{},
+			expected: false,
+		},
+		{
+			name:     "UpdateHealthInsight with not our manager label",
+			labels:   map[string]string{labelUpdateHealthInsightManager: "other-manager"},
+			expected: false,
+		},
+		{
+			name:     "UpdateHealthInsight with our manager label",
+			labels:   map[string]string{labelUpdateHealthInsightManager: "clusterversionprogressinsight"},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			insight := openshiftv1alpha1.UpdateHealthInsight{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: tc.labels,
+				},
+			}
+
+			create := event.CreateEvent{Object: &insight}
+			createResult := healthInsightsManagedByClusterVersionProgressInsight.Create(create)
+			if createResult != tc.expected {
+				t.Errorf("create: expected %v, got %v", tc.expected, createResult)
+			}
+
+			old := insight.DeepCopy()
+			old.Labels = nil
+			update := event.UpdateEvent{ObjectNew: &insight, ObjectOld: old}
+			updateResult := healthInsightsManagedByClusterVersionProgressInsight.Update(update)
+			if updateResult != tc.expected {
+				t.Errorf("update: expected %v, got %v", tc.expected, updateResult)
+			}
+
+			deleted := event.DeleteEvent{Object: &insight}
+			deleteResult := healthInsightsManagedByClusterVersionProgressInsight.Delete(deleted)
+			if deleteResult != tc.expected {
+				t.Errorf("expected %v, got %v", tc.expected, deleteResult)
+			}
+			generic := event.GenericEvent{Object: &insight}
+			genericResult := healthInsightsManagedByClusterVersionProgressInsight.Generic(generic)
+			if genericResult != tc.expected {
+				t.Errorf("expected %v, got %v", tc.expected, genericResult)
+			}
+		})
+	}
+}
