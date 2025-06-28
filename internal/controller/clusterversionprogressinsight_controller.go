@@ -87,6 +87,7 @@ func cvProgressingToUpdating(cvProgressing openshiftconfigv1.ClusterOperatorStat
 		reason = string(ouev1alpha1.ClusterVersionCannotDetermineUpdating)
 	default:
 		reason = string(ouev1alpha1.ClusterVersionCannotDetermineUpdating)
+		status = metav1.ConditionUnknown
 	}
 
 	message := fmt.Sprintf("ClusterVersion has Progressing=%s(Reason=%s) | Message='%s'", cvProgressing.Status, cvProgressing.Reason, cvProgressing.Message)
@@ -131,7 +132,7 @@ func isControlPlaneUpdating(cvProgressing *openshiftconfigv1.ClusterOperatorStat
 		if lastHistoryItem.State != openshiftconfigv1.CompletedUpdate {
 			setCannotDetermineUpdating(&updating, "Progressing=False in ClusterVersion but last history item is not completed")
 		} else if lastHistoryItem.CompletionTime == nil {
-			setCannotDetermineUpdating(&updating, "Progressing=False in ClusterVersion but not no completion in last history item")
+			setCannotDetermineUpdating(&updating, "Progressing=False in ClusterVersion but no completion in last history item")
 		} else {
 			started = lastHistoryItem.StartedTime
 			completed = *lastHistoryItem.CompletionTime
