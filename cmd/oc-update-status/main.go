@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -58,6 +58,10 @@ func (o *options) Complete(cmd *cobra.Command, args []string) error {
 	return err
 }
 
+func (o *options) enabledDetailed(what string) bool {
+	return o.detailedOutput == detailedOutputAll || o.detailedOutput == what
+}
+
 const (
 	detailedOutputNone      = "none"
 	detailedOutputAll       = "all"
@@ -92,6 +96,13 @@ func New() *cobra.Command {
 		fmt.Sprintf("Show detailed output in selected section. One of: %s", strings.Join(detailedOutputAllValues, ", ")))
 
 	return cmd
+}
+
+func (o *options) now() time.Time {
+	if o.mockData.path != "" {
+		return o.mockData.mockNow
+	}
+	return time.Now()
 }
 
 func (o *options) ClusterVersionProgressInsights(ctx context.Context) (
@@ -139,6 +150,7 @@ func (o *options) ClusterVersionProgressInsights(ctx context.Context) (
 // }
 
 func (o *options) Run(ctx context.Context) error {
+	now := o.now()
 	cvInsights, err := o.ClusterVersionProgressInsights(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get ClusterVersion insights: %w", err)
@@ -190,37 +202,8 @@ func (o *options) Run(ctx context.Context) error {
 	// 	return fmt.Errorf("failed to get UpdateHealth insights: %w", err)
 	// }
 
-	return o.printTable(&cvInsights)
-}
-
-func (o *options) printTable(
-	cvInsights *ouev1alpha1.ClusterVersionProgressInsightList,
-) error {
-	w := tabwriter.NewWriter(o.Out, 0, 0, 2, ' ', 0)
-	defer func() {
-		if err := w.Flush(); err != nil {
-			_, _ = fmt.Fprintf(o.ErrOut, "Warning: failed to flush output: %v\n", err)
-		}
-	}()
-
-	_, _ = fmt.Fprintln(w, "TYPE\tNAME\tSTATUS")
-
-	for _, item := range cvInsights.Items {
-		status := item.Status.Assessment
-		_, _ = fmt.Fprintf(w, "ClusterVersionProgressInsight\t%s\t%s\t\n", item.Name, status)
-	}
-
-	// TODO(muller): Enable as I am adding functionality to the plugin.
-
-	// for _, item := range coInsights.Items {
-	// 	status := getClusterOperatorStatus(&item)
-	// 	_, _ = fmt.Fprintf(w, "ClusterOperatorProgressInsight\t%s\t%s\t\n", item.Name, status)
-	// }
-
-	// for _, item := range nodeInsights.Items {
-	// 	status := getNodeStatus(&item)
-	// 	_, _ = fmt.Fprintf(w, "NodeProgressInsight\t%s\t%s\t\n", item.Name, status)
-	// }
+	controlPlaneStatusData := assessControlPlaneStatus(&cvInsight.Status)
+	_ = controlPlaneStatusData.Write(o.Out, o.enabledDetailed(detailedOutputOperators), now)
 
 	return nil
 }

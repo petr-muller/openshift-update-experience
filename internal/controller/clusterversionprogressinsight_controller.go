@@ -202,7 +202,7 @@ func forcedHealthInsight(cv *openshiftconfigv1.ClusterVersion, now metav1.Time) 
 // It does not take previous status insight into account. Many fields of the status insights (such as completion) cannot
 // be properly calculated without also watching and processing ClusterOperators, so that functionality will need to be
 // added later.
-func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, previous *ouev1alpha1.ClusterVersionProgressInsight) (*ouev1alpha1.ClusterVersionProgressInsightStatus, []*ouev1alpha1.UpdateHealthInsightStatus) {
+func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, previous *ouev1alpha1.ClusterVersionProgressInsightStatus) (*ouev1alpha1.ClusterVersionProgressInsightStatus, []*ouev1alpha1.UpdateHealthInsightStatus) {
 	var lastHistoryItem *openshiftconfigv1.UpdateHistory
 	if len(cv.Status.History) > 0 {
 		lastHistoryItem = &cv.Status.History[0]
@@ -237,7 +237,7 @@ func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, previous *ouev1a
 		StartedAt:  startedAt,
 	}
 
-	if oldUpdating := meta.FindStatusCondition(previous.Status.Conditions, updating.Type); oldUpdating != nil {
+	if oldUpdating := meta.FindStatusCondition(previous.Conditions, updating.Type); oldUpdating != nil {
 		insight.Conditions = append(insight.Conditions, *oldUpdating)
 	}
 	meta.SetStatusCondition(&insight.Conditions, updating)
@@ -402,7 +402,7 @@ func (r *ClusterVersionProgressInsightReconciler) Reconcile(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
-	cvInsight, healthInsights := assessClusterVersion(&clusterVersion, &progressInsight)
+	cvInsight, healthInsights := assessClusterVersion(&clusterVersion, &progressInsight.Status)
 
 	if apierrors.IsNotFound(err) {
 		if err := r.Create(ctx, &progressInsight); err != nil {

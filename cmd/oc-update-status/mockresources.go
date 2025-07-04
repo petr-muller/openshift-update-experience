@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"time"
 
 	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,6 +20,8 @@ type mockData struct {
 	// coInsights     *ouev1alpha1.ClusterOperatorProgressInsightList
 	// nodeInsights   *ouev1alpha1.NodeProgressInsightList
 	// healthInsights *ouev1alpha1.UpdateHealthInsightList
+
+	mockNow time.Time
 }
 
 func asResourceList[T any](objects *corev1.List, decoder runtime.Decoder) ([]T, error) {
@@ -70,6 +73,30 @@ func (o *mockData) load() error {
 	return nil
 }
 
+func mockNowFromClusterVersionInsight(insight *ouev1alpha1.ClusterVersionProgressInsight) time.Time {
+	var now time.Time
+	if insight == nil {
+		return now
+	}
+
+	for i := range insight.Status.Conditions {
+		condition := insight.Status.Conditions[i]
+		if now.Before(condition.LastTransitionTime.Time) {
+			now = condition.LastTransitionTime.Time
+		}
+	}
+
+	if now.Before(insight.Status.StartedAt.Time) {
+		now = insight.Status.StartedAt.Time
+	}
+
+	if insight.Status.CompletedAt != nil && now.Before(insight.Status.CompletedAt.Time) {
+		now = insight.Status.CompletedAt.Time
+	}
+
+	return now
+}
+
 func (o *mockData) loadClusterVersionInsights(decoder runtime.Decoder) error {
 	insightsPath := path.Join(o.path, "cv-insights.yaml")
 	insightsRaw, err := os.ReadFile(insightsPath)
@@ -94,6 +121,13 @@ func (o *mockData) loadClusterVersionInsights(decoder runtime.Decoder) error {
 	default:
 		return fmt.Errorf("unexpected object type %T in ClusterVersion insights file %s", insightsObj, insightsPath)
 	}
+
+	for i := range o.cvInsights.Items {
+		if now := mockNowFromClusterVersionInsight(&o.cvInsights.Items[i]); o.mockNow.Before(now) {
+			o.mockNow = now
+		}
+	}
+
 	return nil
 }
 
