@@ -91,6 +91,13 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 				Image:          "quay.io/something/openshift-release:4.18.15-x86_64",
 			}
 
+			cvHistoryPartial15 = openshiftconfigv1.UpdateHistory{
+				State:       openshiftconfigv1.PartialUpdate,
+				StartedTime: minutesAgo[50],
+				Version:     "4.18.15",
+				Image:       "quay.io/something/openshift-release:4.18.15-x86_64",
+			}
+
 			cvHistoryPartial16 = openshiftconfigv1.UpdateHistory{
 				State:       openshiftconfigv1.PartialUpdate,
 				StartedTime: minutesAgo[30],
@@ -104,6 +111,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 			clusterVersion *openshiftconfigv1.ClusterVersion
 
 			expectedUpdatingCondition *metav1.Condition
+			expectedVersions          *openshiftv1alpha1.ControlPlaneUpdateVersions
 		}
 
 		DescribeTable("should create progress insight with matching status",
@@ -148,6 +156,11 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 					)
 				}
 
+				if tc.expectedVersions != nil {
+					By("Verifying the insight has expected versions")
+					Expect(progressInsight.Status.Versions).To(Equal(*tc.expectedVersions))
+				}
+
 				By("Cleanup")
 				Expect(k8sClient.Delete(ctx, tc.clusterVersion)).To(Succeed())
 				Expect(k8sClient.Delete(ctx, progressInsight)).To(Succeed())
@@ -173,6 +186,16 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 					Reason:  string(openshiftv1alpha1.ClusterVersionNotProgressing),
 					Message: "ClusterVersion has Progressing=False(Reason=) | Message='Cluster version is 4.18.15'",
 				},
+				expectedVersions: &openshiftv1alpha1.ControlPlaneUpdateVersions{
+					Target: openshiftv1alpha1.Version{
+						Version: "4.18.15",
+						Metadata: []openshiftv1alpha1.VersionMetadata{
+							{
+								Key: openshiftv1alpha1.InstallationMetadata,
+							},
+						},
+					},
+				},
 			}),
 			Entry("ClusterVersion with Progressing=True (installation)", testCase{
 				name: "ClusterVersion with Progressing=True (installation)",
@@ -194,6 +217,16 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 					Status:  metav1.ConditionTrue,
 					Reason:  string(openshiftv1alpha1.ClusterVersionProgressing),
 					Message: "ClusterVersion has Progressing=True(Reason=) | Message='Working towards 4.18.16: 106 of 863 done (12% complete), waiting on etcd, kube-apiserver'",
+				},
+				expectedVersions: &openshiftv1alpha1.ControlPlaneUpdateVersions{
+					Target: openshiftv1alpha1.Version{
+						Version: "4.18.16",
+						Metadata: []openshiftv1alpha1.VersionMetadata{
+							{
+								Key: openshiftv1alpha1.InstallationMetadata,
+							},
+						},
+					},
 				},
 			}),
 			Entry("ClusterVersion with Progressing=True (update)", testCase{
@@ -217,6 +250,50 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 					Status:  metav1.ConditionTrue,
 					Reason:  string(openshiftv1alpha1.ClusterVersionProgressing),
 					Message: "ClusterVersion has Progressing=True(Reason=) | Message='Working towards 4.18.16: 106 of 863 done (12% complete), waiting on etcd, kube-apiserver'",
+				},
+				expectedVersions: &openshiftv1alpha1.ControlPlaneUpdateVersions{
+					Target: openshiftv1alpha1.Version{
+						Version: "4.18.16",
+					},
+					Previous: &openshiftv1alpha1.Version{
+						Version: "4.18.15",
+					},
+				},
+			}),
+			Entry("ClusterVersion with Progressing=True (update from partial)", testCase{
+				name: "ClusterVersion with Progressing=True (installation)",
+				clusterVersion: &openshiftconfigv1.ClusterVersion{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "version",
+					},
+					Status: openshiftconfigv1.ClusterVersionStatus{
+						Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
+							cvProgressingTrue16,
+						},
+						History: []openshiftconfigv1.UpdateHistory{
+							cvHistoryPartial16,
+							cvHistoryPartial15,
+						},
+					},
+				},
+				expectedUpdatingCondition: &metav1.Condition{
+					Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
+					Status:  metav1.ConditionTrue,
+					Reason:  string(openshiftv1alpha1.ClusterVersionProgressing),
+					Message: "ClusterVersion has Progressing=True(Reason=) | Message='Working towards 4.18.16: 106 of 863 done (12% complete), waiting on etcd, kube-apiserver'",
+				},
+				expectedVersions: &openshiftv1alpha1.ControlPlaneUpdateVersions{
+					Target: openshiftv1alpha1.Version{
+						Version: "4.18.16",
+					},
+					Previous: &openshiftv1alpha1.Version{
+						Version: "4.18.15",
+						Metadata: []openshiftv1alpha1.VersionMetadata{
+							{
+								Key: openshiftv1alpha1.PartialMetadata,
+							},
+						},
+					},
 				},
 			}),
 		)
@@ -745,6 +822,13 @@ func Test_AssessClusterVersion(t *testing.T) {
 			Image:          "quay.io/something/openshift-release:4.18.15-x86_64",
 		}
 
+		cvHistoryPartial15 = openshiftconfigv1.UpdateHistory{
+			State:       openshiftconfigv1.PartialUpdate,
+			StartedTime: minutesAgo[50],
+			Version:     "4.18.15",
+			Image:       "quay.io/something/openshift-release:4.18.15-x86_64",
+		}
+
 		cvHistoryPartial16 = openshiftconfigv1.UpdateHistory{
 			State:       openshiftconfigv1.PartialUpdate,
 			StartedTime: minutesAgo[30],
@@ -781,6 +865,16 @@ func Test_AssessClusterVersion(t *testing.T) {
 						Message: "ClusterVersion has Progressing=False(Reason=) | Message='Cluster version is 4.18.15'",
 					},
 				},
+				Versions: openshiftv1alpha1.ControlPlaneUpdateVersions{
+					Target: openshiftv1alpha1.Version{
+						Version: "4.18.15",
+						Metadata: []openshiftv1alpha1.VersionMetadata{
+							{
+								Key: openshiftv1alpha1.InstallationMetadata,
+							},
+						},
+					},
+				},
 			},
 		},
 		{
@@ -801,6 +895,16 @@ func Test_AssessClusterVersion(t *testing.T) {
 						Status:  metav1.ConditionTrue,
 						Reason:  string(openshiftv1alpha1.ClusterVersionProgressing),
 						Message: "ClusterVersion has Progressing=True(Reason=) | Message='Working towards 4.18.16: 106 of 863 done (12% complete), waiting on etcd, kube-apiserver'",
+					},
+				},
+				Versions: openshiftv1alpha1.ControlPlaneUpdateVersions{
+					Target: openshiftv1alpha1.Version{
+						Version: "4.18.16",
+						Metadata: []openshiftv1alpha1.VersionMetadata{
+							{
+								Key: openshiftv1alpha1.InstallationMetadata,
+							},
+						},
 					},
 				},
 			},
@@ -826,6 +930,50 @@ func Test_AssessClusterVersion(t *testing.T) {
 						Message: "ClusterVersion has Progressing=True(Reason=) | Message='Working towards 4.18.16: 106 of 863 done (12% complete), waiting on etcd, kube-apiserver'",
 					},
 				},
+				Versions: openshiftv1alpha1.ControlPlaneUpdateVersions{
+					Target: openshiftv1alpha1.Version{
+						Version: "4.18.16",
+					},
+					Previous: &openshiftv1alpha1.Version{
+						Version: "4.18.15",
+					},
+				},
+			},
+		},
+		{
+			name: "ClusterVersion with Progressing=True (update from partial)",
+			cv: openshiftconfigv1.ClusterVersionStatus{
+				Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
+					cvProgressingTrue16,
+				},
+				History: []openshiftconfigv1.UpdateHistory{
+					cvHistoryPartial16,
+					cvHistoryPartial15,
+				},
+			},
+			expectedInsight: &openshiftv1alpha1.ClusterVersionProgressInsightStatus{
+				Assessment: openshiftv1alpha1.ClusterVersionAssessmentProgressing,
+				Conditions: []metav1.Condition{
+					{
+						Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
+						Status:  metav1.ConditionTrue,
+						Reason:  string(openshiftv1alpha1.ClusterVersionProgressing),
+						Message: "ClusterVersion has Progressing=True(Reason=) | Message='Working towards 4.18.16: 106 of 863 done (12% complete), waiting on etcd, kube-apiserver'",
+					},
+				},
+				Versions: openshiftv1alpha1.ControlPlaneUpdateVersions{
+					Target: openshiftv1alpha1.Version{
+						Version: "4.18.16",
+					},
+					Previous: &openshiftv1alpha1.Version{
+						Version: "4.18.15",
+						Metadata: []openshiftv1alpha1.VersionMetadata{
+							{
+								Key: openshiftv1alpha1.PartialMetadata,
+							},
+						},
+					},
+				},
 			},
 		},
 	}
@@ -833,7 +981,6 @@ func Test_AssessClusterVersion(t *testing.T) {
 	// TODO(muller): Remove ignored fields as I add functionality
 	ignoreInProgressInsight := cmpopts.IgnoreFields(
 		openshiftv1alpha1.ClusterVersionProgressInsightStatus{},
-		"Versions",
 		"Completion",
 		"StartedAt",
 		"CompletedAt",

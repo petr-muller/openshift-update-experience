@@ -135,21 +135,60 @@ func TestControlPlaneStatusDisplayDataWrite(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "Progressing",
+			name: "Progressing installation",
 			data: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				TargetVersion: versions{
+					target:          "4.11.0",
+					isTargetInstall: true,
+				},
 			},
 			expected: `= Control Plane =
 Assessment:      Progressing
+Target Version:  4.11.0 (installation)
+`,
+		},
+		{
+			name: "Progressing update",
+			data: controlPlaneStatusDisplayData{
+				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				TargetVersion: versions{
+					previous: "4.10.0",
+					target:   "4.11.0",
+				},
+			},
+			expected: `= Control Plane =
+Assessment:      Progressing
+Target Version:  4.11.0 (from 4.10.0)
+`,
+		},
+		{
+			name: "Progressing update from partial",
+			data: controlPlaneStatusDisplayData{
+				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				TargetVersion: versions{
+					previous:          "4.10.0",
+					target:            "4.11.0",
+					isPreviousPartial: true,
+				},
+			},
+			expected: `= Control Plane =
+Assessment:      Progressing
+Target Version:  4.11.0 (from incomplete 4.10.0)
 `,
 		},
 		{
 			name: "Completed",
 			data: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentCompleted),
+				TargetVersion: versions{
+					previous: "4.10.0",
+					target:   "4.11.0",
+				},
 			},
 			expected: `= Control Plane =
 Assessment:      Completed
+Target Version:  4.11.0 (from 4.10.0)
 `,
 		},
 	}
@@ -174,21 +213,97 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 		expected        controlPlaneStatusDisplayData
 	}{
 		{
-			name: "Progressing",
+			name: "Progressing update",
 			cvInsightStatus: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
+				Versions: v1alpha1.ControlPlaneUpdateVersions{
+					Previous: &v1alpha1.Version{
+						Version: "4.10.0",
+					},
+					Target: v1alpha1.Version{
+						Version: "4.11.0",
+					},
+				},
 			},
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				TargetVersion: versions{
+					previous: "4.10.0",
+					target:   "4.11.0",
+				},
 			},
 		},
 		{
-			name: "Completed",
+			name: "Progressing update from partial previous",
+			cvInsightStatus: &v1alpha1.ClusterVersionProgressInsightStatus{
+				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
+				Versions: v1alpha1.ControlPlaneUpdateVersions{
+					Previous: &v1alpha1.Version{
+						Version: "4.10.0",
+						Metadata: []v1alpha1.VersionMetadata{
+							{
+								Key: v1alpha1.PartialMetadata,
+							},
+						},
+					},
+					Target: v1alpha1.Version{
+						Version: "4.11.0",
+					},
+				},
+			},
+			expected: controlPlaneStatusDisplayData{
+				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				TargetVersion: versions{
+					previous:          "4.10.0",
+					target:            "4.11.0",
+					isPreviousPartial: true,
+				},
+			},
+		},
+		{
+			name: "Progressing installation",
+			cvInsightStatus: &v1alpha1.ClusterVersionProgressInsightStatus{
+				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
+				Versions: v1alpha1.ControlPlaneUpdateVersions{
+					Target: v1alpha1.Version{
+						Version: "4.11.0",
+						Metadata: []v1alpha1.VersionMetadata{
+							{
+								Key: v1alpha1.InstallationMetadata,
+							},
+						},
+					},
+				},
+			},
+			expected: controlPlaneStatusDisplayData{
+				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				TargetVersion: versions{
+					target:          "4.11.0",
+					isTargetInstall: true,
+				},
+			},
+		},
+		{
+			name: "Completed installation",
 			cvInsightStatus: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentCompleted,
+				Versions: v1alpha1.ControlPlaneUpdateVersions{
+					Target: v1alpha1.Version{
+						Version: "4.11.0",
+						Metadata: []v1alpha1.VersionMetadata{
+							{
+								Key: v1alpha1.InstallationMetadata,
+							},
+						},
+					},
+				},
 			},
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentCompleted),
+				TargetVersion: versions{
+					target:          "4.11.0",
+					isTargetInstall: true,
+				},
 			},
 		},
 	}
@@ -196,8 +311,157 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := assessControlPlaneStatus(tc.cvInsightStatus)
-			if diff := cmp.Diff(tc.expected, result); diff != "" {
+			if diff := cmp.Diff(tc.expected, result, cmp.AllowUnexported(versions{})); diff != "" {
 				t.Errorf("assessControlPlaneStatus() mismatch (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func Test_VersionsString(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		versions versions
+		expected string
+	}{
+		{
+			name: "installation",
+			versions: versions{
+				target:          "1.0.0",
+				isTargetInstall: true,
+			},
+			expected: "1.0.0 (installation)",
+		},
+		{
+			name: "upgrade",
+			versions: versions{
+				previous: "0.9.0",
+				target:   "1.0.0",
+			},
+			expected: "1.0.0 (from 0.9.0)",
+		},
+		{
+			name: "upgrade from partial",
+			versions: versions{
+				previous:          "0.9.0",
+				target:            "1.0.0",
+				isPreviousPartial: true,
+			},
+			expected: "1.0.0 (from incomplete 0.9.0)",
+		},
+		{
+			name: "multiarch migration",
+			versions: versions{
+				previous:             "1.0.0",
+				target:               "1.0.0",
+				isMultiArchMigration: true,
+			},
+			expected: "1.0.0 to Multi-Architecture",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tc.versions.String()
+			if diff := cmp.Diff(tc.expected, result); diff != "" {
+				t.Errorf("versionsString() mismatch (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func Test_VersionsFromClusterVersionProgressInsight(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name            string
+		insightVersions v1alpha1.ControlPlaneUpdateVersions
+		expected        versions
+	}{
+		{
+			name: "installation",
+			insightVersions: v1alpha1.ControlPlaneUpdateVersions{
+				Target: v1alpha1.Version{
+					Version: "4.11.0",
+					Metadata: []v1alpha1.VersionMetadata{
+						{
+							Key: v1alpha1.InstallationMetadata,
+						},
+					},
+				},
+			},
+			expected: versions{
+				target:          "4.11.0",
+				isTargetInstall: true,
+			},
+		},
+		{
+			name: "upgrade",
+			insightVersions: v1alpha1.ControlPlaneUpdateVersions{
+				Previous: &v1alpha1.Version{
+					Version: "4.10.0",
+				},
+				Target: v1alpha1.Version{
+					Version: "4.11.0",
+				},
+			},
+			expected: versions{
+				previous: "4.10.0",
+				target:   "4.11.0",
+			},
+		},
+		{
+			name: "upgrade from partial",
+			insightVersions: v1alpha1.ControlPlaneUpdateVersions{
+				Previous: &v1alpha1.Version{
+					Version: "4.10.0",
+					Metadata: []v1alpha1.VersionMetadata{
+						{
+							Key: v1alpha1.PartialMetadata,
+						},
+					},
+				},
+				Target: v1alpha1.Version{
+					Version: "4.11.0",
+				},
+			},
+			expected: versions{
+				previous:          "4.10.0",
+				target:            "4.11.0",
+				isPreviousPartial: true,
+			},
+		},
+		{
+			name: "multiarch migration",
+			insightVersions: v1alpha1.ControlPlaneUpdateVersions{
+				Previous: &v1alpha1.Version{
+					Version: "4.10.0",
+				},
+				Target: v1alpha1.Version{
+					Version: "4.11.0",
+					Metadata: []v1alpha1.VersionMetadata{
+						{
+							Key:   v1alpha1.ArchitectureMetadata,
+							Value: "multi",
+						},
+					},
+				},
+			},
+			expected: versions{
+				previous:             "4.10.0",
+				target:               "4.11.0",
+				isMultiArchMigration: true,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := versionsFromClusterVersionProgressInsight(tc.insightVersions)
+			if diff := cmp.Diff(tc.expected, result, cmp.AllowUnexported(versions{})); diff != "" {
+				t.Errorf("versionsFromClusterVersionProgressInsight() mismatch (-expected +got):\n%s", diff)
 			}
 		})
 	}

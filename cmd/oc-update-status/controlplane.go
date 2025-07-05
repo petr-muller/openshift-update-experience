@@ -12,6 +12,27 @@ import (
 
 type assessmentState string
 
+type versions struct {
+	target               string
+	previous             string
+	isTargetInstall      bool
+	isPreviousPartial    bool
+	isMultiArchMigration bool
+}
+
+func (v versions) String() string {
+	if v.isTargetInstall {
+		return fmt.Sprintf("%s (installation)", v.target)
+	}
+	if v.isPreviousPartial {
+		return fmt.Sprintf("%s (from incomplete %s)", v.target, v.previous)
+	}
+	if v.isMultiArchMigration {
+		return fmt.Sprintf("%s to Multi-Architecture", v.target)
+	}
+	return fmt.Sprintf("%s (from %s)", v.target, v.previous)
+}
+
 type controlPlaneStatusDisplayData struct {
 	Assessment assessmentState
 	// Completion           float64
@@ -20,17 +41,16 @@ type controlPlaneStatusDisplayData struct {
 	// EstDuration          time.Duration
 	// EstTimeToComplete    time.Duration
 	// Operators            operators
-	// TargetVersion        versions
-	// IsMultiArchMigration bool
+	TargetVersion versions
 }
 
 const controlPlaneStatusTemplateRaw = `= Control Plane =
 Assessment:      {{ .Assessment }}
+Target Version:  {{ .TargetVersion }}
 `
 
 //nolint:lll
 // TODO(muller): Complete the template as I add more functionality.
-// Target Version:  {{ .TargetVersion }}
 // {{ with commaJoin .Operators.Updating -}}
 // Updating:        {{ . }}
 // {{ end -}}
@@ -144,6 +164,100 @@ const (
 // clusterVersionKind  string = "ClusterVersion"
 // clusterOperatorKind string = "ClusterOperator"
 )
+
+// func multiArchMigration(history []v1.UpdateHistory) bool {
+// 	return len(history) > 1 &&
+// 		history[0].Version == history[1].Version &&
+// 		history[0].Image != history[1].Image
+// }
+
+//nolint:lll
+// func versionsFromHistory(history []v1.UpdateHistory) versions {
+// 	versionData := versions{
+// 		target:   "unknown",
+// 		previous: "unknown",
+// 	}
+// 	if len(history) > 0 {
+// 		versionData.target = history[0].Version
+// 	}
+// 	if len(history) == 1 {
+// 		versionData.isTargetInstall = true
+// 		return versionData
+// 	}
+// 	if len(history) > 1 {
+// 		versionData.previous = history[1].Version
+// 		versionData.isPreviousPartial = history[1].State == v1.PartialUpdate
+// 		versionData.isMultiArchMigration = multiArchMigration(history)
+// 	}
+// var insights []updateInsight
+// if !controlPlaneCompleted && versionData.isPreviousPartial {
+// 	lastComplete := "unknown"
+// 	if len(history) > 2 {
+// 		for _, item := range history[2:] {
+// 			if item.State == v1.CompletedUpdate {
+// 				lastComplete = item.Version
+// 				break
+// 			}
+// 		}
+// 	}
+// 	insights = []updateInsight{
+// 		{
+// 			startedAt: history[0].StartedTime.Time,
+// 			scope: updateInsightScope{
+// 				scopeType: scopeTypeControlPlane,
+// 				resources: []scopeResource{cvScope},
+// 			},
+// 			impact: updateInsightImpact{
+// 				level:       warningImpactLevel,
+// 				impactType:  noneImpactType,
+// 				summary:     fmt.Sprintf("Previous update to %s never completed, last complete update was %s", versionData.previous, lastComplete),
+// 				description: fmt.Sprintf("Current update to %s was initiated while the previous update to version %s was still in progress", versionData.target, versionData.previous),
+// 			},
+// 			remediation: updateInsightRemediation{
+// 				reference: "https://docs.openshift.com/container-platform/latest/updating/troubleshooting_updates/gathering-data-cluster-update.html#gathering-clusterversion-history-cli_troubleshooting_updates",
+// 			},
+// 		},
+// 	}
+// }
+// return versionData
+// }
+
+func versionsFromClusterVersionProgressInsight(insightVersions v1alpha1.ControlPlaneUpdateVersions) versions {
+	v := versions{
+		target:   insightVersions.Target.Version,
+		previous: "unknown",
+	}
+
+	var targetArch, previousArch string
+	for _, targetMeta := range insightVersions.Target.Metadata {
+		if targetMeta.Key == v1alpha1.InstallationMetadata {
+			v.isTargetInstall = true
+			v.previous = ""
+			return v
+		}
+		if targetMeta.Key == v1alpha1.ArchitectureMetadata {
+			targetArch = targetMeta.Value
+		}
+	}
+
+	if insightVersions.Previous != nil {
+		v.previous = insightVersions.Previous.Version
+		for _, previousMeta := range insightVersions.Previous.Metadata {
+			if previousMeta.Key == v1alpha1.PartialMetadata {
+				v.isPreviousPartial = true
+			}
+			if previousMeta.Key == v1alpha1.ArchitectureMetadata {
+				previousArch = previousMeta.Value
+			}
+		}
+	}
+
+	if targetArch == "multi" && previousArch != "multi" {
+		v.isMultiArchMigration = true
+	}
+
+	return v
+}
 
 func assessControlPlaneStatus(cv *v1alpha1.ClusterVersionProgressInsightStatus) controlPlaneStatusDisplayData {
 	var displayData controlPlaneStatusDisplayData
@@ -311,9 +425,8 @@ func assessControlPlaneStatus(cv *v1alpha1.ClusterVersionProgressInsightStatus) 
 	// 	}
 	// }
 
-	// versionData, versionInsights := versionsFromHistory(cv.Status.History, cvScope, controlPlaneCompleted)
-	// displayData.TargetVersion = versionData
-	// displayData.IsMultiArchMigration = versionData.isMultiArchMigration
+	versionData := versionsFromClusterVersionProgressInsight(cv.Versions)
+	displayData.TargetVersion = versionData
 	// insights = append(insights, versionInsights...)
 
 	//nolint:lll
