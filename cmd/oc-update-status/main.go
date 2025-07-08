@@ -116,19 +116,18 @@ func (o *options) ClusterVersionProgressInsights(ctx context.Context) (
 	return cvInsights, err
 }
 
+func (o *options) ClusterOperatorProgressInsights(ctx context.Context) (
+	ouev1alpha1.ClusterOperatorProgressInsightList, error) {
+	if o.mockData.path != "" {
+		return o.mockData.coInsights, nil
+	}
+
+	var coInsights ouev1alpha1.ClusterOperatorProgressInsightList
+	err := o.client.List(ctx, &coInsights)
+	return coInsights, err
+}
+
 // TODO(muller): Enable as I am adding functionality to the plugin.
-
-// func (o *options) ClusterOperatorProgressInsights(ctx context.Context) (
-//	ouev1alpha1.ClusterOperatorProgressInsightList, error) {
-// 	if o.mockData.path != "" {
-// 		return o.mockData.coInsights, nil
-// 	}
-//
-// 	var coInsights ouev1alpha1.ClusterOperatorProgressInsightList
-// 	err := o.client.List(ctx, &cvInsights)
-// 	return coInsights, err
-// }
-
 // func (o *options) NodeProgressInsights(ctx context.Context) (ouev1alpha1.NodeProgressInsightList, error) {
 // 	if o.mockData.path != "" {
 // 		return o.mockData.nodeInsights, nil
@@ -185,13 +184,17 @@ func (o *options) Run(ctx context.Context) error {
 		return nil
 	}
 
+	coInsights, err := o.ClusterOperatorProgressInsights(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get ClusterOperator insights: %w", err)
+	}
+
+	cos := make([]ouev1alpha1.ClusterOperatorProgressInsightStatus, 0, len(coInsights.Items))
+	for i := range coInsights.Items {
+		cos = append(cos, coInsights.Items[i].Status)
+	}
+
 	// TODO(muller): Enable as I am adding functionality to the plugin.
-
-	// coInsights, err := o.ClusterOperatorProgressInsights(ctx)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to get ClusterOperator insights: %w", err)
-	// }
-
 	// nodeInsights, err := o.NodeProgressInsights(ctx)
 	// if err != nil {
 	// 	return fmt.Errorf("failed to get Node insights: %w", err)
@@ -202,7 +205,7 @@ func (o *options) Run(ctx context.Context) error {
 	// 	return fmt.Errorf("failed to get UpdateHealth insights: %w", err)
 	// }
 
-	controlPlaneStatusData := assessControlPlaneStatus(&cvInsight.Status)
+	controlPlaneStatusData := assessControlPlaneStatus(&cvInsight.Status, cos)
 	_ = controlPlaneStatusData.Write(o.Out, o.enabledDetailed(detailedOutputOperators), now)
 
 	return nil

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/petr-muller/openshift-update-experience/api/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestShortDuration(t *testing.T) {
@@ -129,6 +130,27 @@ func TestVagueUnder(t *testing.T) {
 func TestControlPlaneStatusDisplayDataWrite(t *testing.T) {
 	t.Parallel()
 
+	updatingTrue := metav1.Condition{
+		Type:    string(v1alpha1.ClusterOperatorProgressInsightUpdating),
+		Status:  metav1.ConditionTrue,
+		Reason:  "OperatorGoesBrrr",
+		Message: "Operator goes brrr",
+	}
+
+	updatingFalsePending := metav1.Condition{
+		Type:    string(v1alpha1.ClusterOperatorProgressInsightUpdating),
+		Status:  metav1.ConditionFalse,
+		Reason:  "Pending",
+		Message: "Operator will go brrr soon",
+	}
+
+	updatingFalseUpdated := metav1.Condition{
+		Type:    string(v1alpha1.ClusterOperatorProgressInsightUpdating),
+		Status:  metav1.ConditionFalse,
+		Reason:  "Updated",
+		Message: "Operator went brrr",
+	}
+
 	testCases := []struct {
 		name     string
 		data     controlPlaneStatusDisplayData
@@ -152,6 +174,61 @@ Target Version:  4.11.0 (installation)
 			name: "Progressing update",
 			data: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				TargetVersion: versions{
+					previous: "4.10.0",
+					target:   "4.11.0",
+				},
+			},
+			expected: `= Control Plane =
+Assessment:      Progressing
+Target Version:  4.11.0 (from 4.10.0)
+`,
+		},
+		{
+			name: "Progressing update with updating operator",
+			data: controlPlaneStatusDisplayData{
+				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				TargetVersion: versions{
+					previous: "4.10.0",
+					target:   "4.11.0",
+				},
+				Operators: operators{
+					Total:    1,
+					Updating: []operator{{Name: "test-operator", Condition: updatingTrue}},
+				},
+			},
+			expected: `= Control Plane =
+Assessment:      Progressing
+Target Version:  4.11.0 (from 4.10.0)
+Updating:        test-operator
+`,
+		},
+		{
+			name: "Progressing update with pending operator",
+			data: controlPlaneStatusDisplayData{
+				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				Operators: operators{
+					Total:   1,
+					Waiting: []operator{{Name: "test-operator", Condition: updatingFalsePending}},
+				},
+				TargetVersion: versions{
+					previous: "4.10.0",
+					target:   "4.11.0",
+				},
+			},
+			expected: `= Control Plane =
+Assessment:      Progressing
+Target Version:  4.11.0 (from 4.10.0)
+`,
+		},
+		{
+			name: "Progressing update with updated operator",
+			data: controlPlaneStatusDisplayData{
+				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				Operators: operators{
+					Total:   1,
+					Updated: []operator{{Name: "test-operator", Condition: updatingFalseUpdated}},
+				},
 				TargetVersion: versions{
 					previous: "4.10.0",
 					target:   "4.11.0",
@@ -207,14 +284,69 @@ Target Version:  4.11.0 (from 4.10.0)
 }
 
 func Test_assessControlPlaneStatus(t *testing.T) {
+	updatingTrue := metav1.Condition{
+		Type:    string(v1alpha1.ClusterOperatorProgressInsightUpdating),
+		Status:  metav1.ConditionTrue,
+		Reason:  "OperatorGoesBrrr",
+		Message: "Operator goes brrr",
+	}
+	updatingFalsePending := metav1.Condition{
+		Type:    string(v1alpha1.ClusterOperatorProgressInsightUpdating),
+		Status:  metav1.ConditionFalse,
+		Reason:  "Pending",
+		Message: "Operator will go brrr soon",
+	}
+	updatingFalseUpdated := metav1.Condition{
+		Type:    string(v1alpha1.ClusterOperatorProgressInsightUpdating),
+		Status:  metav1.ConditionFalse,
+		Reason:  "Updated",
+		Message: "Operator went brrr",
+	}
+
 	testCases := []struct {
-		name            string
-		cvInsightStatus *v1alpha1.ClusterVersionProgressInsightStatus
-		expected        controlPlaneStatusDisplayData
-	}{
+		name       string
+		cvInsight  *v1alpha1.ClusterVersionProgressInsightStatus
+		coInsights []v1alpha1.ClusterOperatorProgressInsightStatus
+		expected   controlPlaneStatusDisplayData
+	}{{
+		name: "Progressing update with pending ClusterOperator",
+		cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
+			Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
+			Versions: v1alpha1.ControlPlaneUpdateVersions{
+				Previous: &v1alpha1.Version{
+					Version: "4.10.0",
+				},
+				Target: v1alpha1.Version{
+					Version: "4.11.0",
+				},
+			},
+		},
+		coInsights: []v1alpha1.ClusterOperatorProgressInsightStatus{
+			{
+				Name:       "test-operator",
+				Conditions: []metav1.Condition{updatingFalsePending},
+			},
+		},
+		expected: controlPlaneStatusDisplayData{
+			Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+			Operators: operators{
+				Total: 1,
+				Waiting: []operator{
+					{
+						Name:      "test-operator",
+						Condition: updatingFalsePending,
+					},
+				},
+			},
+			TargetVersion: versions{
+				previous: "4.10.0",
+				target:   "4.11.0",
+			},
+		},
+	},
 		{
-			name: "Progressing update",
-			cvInsightStatus: &v1alpha1.ClusterVersionProgressInsightStatus{
+			name: "Progressing update with updated ClusterOperator",
+			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Previous: &v1alpha1.Version{
@@ -225,8 +357,59 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 					},
 				},
 			},
+			coInsights: []v1alpha1.ClusterOperatorProgressInsightStatus{
+				{
+					Name:       "test-operator",
+					Conditions: []metav1.Condition{updatingFalseUpdated},
+				},
+			},
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				Operators: operators{
+					Total: 1,
+					Updated: []operator{
+						{
+							Name:      "test-operator",
+							Condition: updatingFalseUpdated,
+						},
+					},
+				},
+				TargetVersion: versions{
+					previous: "4.10.0",
+					target:   "4.11.0",
+				},
+			},
+		},
+		{
+			name: "Progressing update with updating ClusterOperator",
+			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
+				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
+				Versions: v1alpha1.ControlPlaneUpdateVersions{
+					Previous: &v1alpha1.Version{
+						Version: "4.10.0",
+					},
+					Target: v1alpha1.Version{
+						Version: "4.11.0",
+					},
+				},
+			},
+			coInsights: []v1alpha1.ClusterOperatorProgressInsightStatus{
+				{
+					Name:       "test-operator",
+					Conditions: []metav1.Condition{updatingTrue},
+				},
+			},
+			expected: controlPlaneStatusDisplayData{
+				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				Operators: operators{
+					Total: 1,
+					Updating: []operator{
+						{
+							Name:      "test-operator",
+							Condition: updatingTrue,
+						},
+					},
+				},
 				TargetVersion: versions{
 					previous: "4.10.0",
 					target:   "4.11.0",
@@ -235,7 +418,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 		},
 		{
 			name: "Progressing update from partial previous",
-			cvInsightStatus: &v1alpha1.ClusterVersionProgressInsightStatus{
+			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Previous: &v1alpha1.Version{
@@ -262,7 +445,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 		},
 		{
 			name: "Progressing installation",
-			cvInsightStatus: &v1alpha1.ClusterVersionProgressInsightStatus{
+			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Target: v1alpha1.Version{
@@ -285,7 +468,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 		},
 		{
 			name: "Completed installation",
-			cvInsightStatus: &v1alpha1.ClusterVersionProgressInsightStatus{
+			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentCompleted,
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Target: v1alpha1.Version{
@@ -310,7 +493,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := assessControlPlaneStatus(tc.cvInsightStatus)
+			result := assessControlPlaneStatus(tc.cvInsight, tc.coInsights)
 			if diff := cmp.Diff(tc.expected, result, cmp.AllowUnexported(versions{})); diff != "" {
 				t.Errorf("assessControlPlaneStatus() mismatch (-expected +got):\n%s", diff)
 			}

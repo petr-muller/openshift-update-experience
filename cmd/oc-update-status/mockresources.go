@@ -16,8 +16,8 @@ type mockData struct {
 	path string
 
 	cvInsights ouev1alpha1.ClusterVersionProgressInsightList
+	coInsights ouev1alpha1.ClusterOperatorProgressInsightList
 	// TODO(muller): Enable as I am adding functionality to the plugin.
-	// coInsights     *ouev1alpha1.ClusterOperatorProgressInsightList
 	// nodeInsights   *ouev1alpha1.NodeProgressInsightList
 	// healthInsights *ouev1alpha1.UpdateHealthInsightList
 
@@ -56,12 +56,11 @@ func (o *mockData) load() error {
 		return fmt.Errorf("failed to load ClusterVersion insights: %w", err)
 	}
 
+	if err := o.loadClusterOperatorInsights(decoder); err != nil {
+		return fmt.Errorf("failed to load ClusterOperator insights: %w", err)
+	}
+
 	// TODO(muller): Enable as I am adding functionality to the plugin.
-
-	// if err := o.loadClusterOperatorInsights(decoder); err != nil {
-	// 	return fmt.Errorf("failed to load ClusterOperator insights: %w", err)
-	// }
-
 	// if err := o.loadNodeInsights(decoder); err != nil {
 	// 	return fmt.Errorf("failed to load Node insights: %w", err)
 	// }
@@ -97,12 +96,34 @@ func mockNowFromClusterVersionInsight(insight *ouev1alpha1.ClusterVersionProgres
 	return now
 }
 
+func mockNowFromClusterOperatorInsight(insight *ouev1alpha1.ClusterOperatorProgressInsight) time.Time {
+	var now time.Time
+	if insight == nil {
+		return now
+	}
+
+	for i := range insight.Status.Conditions {
+		condition := insight.Status.Conditions[i]
+		if now.Before(condition.LastTransitionTime.Time) {
+			now = condition.LastTransitionTime.Time
+		}
+	}
+
+	return now
+}
+
+// nolint:dupl
 func (o *mockData) loadClusterVersionInsights(decoder runtime.Decoder) error {
 	insightsPath := path.Join(o.path, "cv-insights.yaml")
 	insightsRaw, err := os.ReadFile(insightsPath)
-	if err != nil {
+	switch {
+	case os.IsNotExist(err):
+		o.cvInsights = ouev1alpha1.ClusterVersionProgressInsightList{}
+		return nil
+	case err != nil:
 		return fmt.Errorf("failed to read ClusterVersion insights file %s: %w", insightsPath, err)
 	}
+
 	insightsObj, err := runtime.Decode(decoder, insightsRaw)
 	if err != nil {
 		return fmt.Errorf("failed to decode ClusterVersion insights file %s: %w", insightsPath, err)
@@ -133,32 +154,45 @@ func (o *mockData) loadClusterVersionInsights(decoder runtime.Decoder) error {
 
 // TODO(muller): Enable as I am adding functionality to the plugin.
 
-// func (o *mockData) loadClusterOperatorInsights(decoder runtime.Decoder) error {
-// 	insightsPath := path.Join(o.path, "co-insights.yaml")
-// 	insightsRaw, err := os.ReadFile(insightsPath)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to read ClusterOperator insights file %s: %w", insightsPath, err)
-// 	}
-// 	insightsObj, err := runtime.Decode(decoder, insightsRaw)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to decode ClusterOperator insights file %s: %w", insightsPath, err)
-// 	}
-// 	switch insightsObj := insightsObj.(type) {
-// 	case *ouev1alpha1.ClusterOperatorProgressInsightList:
-// 		o.coInsights = insightsObj
-// 	case *corev1.List:
-// 		list, err := asResourceList[ouev1alpha1.ClusterOperatorProgressInsight](insightsObj, decoder)
-// 		if err != nil {
-// 			return fmt.Errorf("error while parsing file %s: %w", insightsPath, err)
-// 		}
-// 		o.coInsights = &ouev1alpha1.ClusterOperatorProgressInsightList{
-// 			Items: list,
-// 		}
-// 	default:
-// 		return fmt.Errorf("unexpected object type %T in ClusterOperator insights file %s", insightsObj, insightsPath)
-// 	}
-// 	return nil
-// }
+//nolint:dupl
+func (o *mockData) loadClusterOperatorInsights(decoder runtime.Decoder) error {
+	insightsPath := path.Join(o.path, "co-insights.yaml")
+	insightsRaw, err := os.ReadFile(insightsPath)
+	switch {
+	case os.IsNotExist(err):
+		o.coInsights = ouev1alpha1.ClusterOperatorProgressInsightList{}
+		return nil
+	case err != nil:
+		return fmt.Errorf("failed to read ClusterOperator insights file %s: %w", insightsPath, err)
+	}
+
+	insightsObj, err := runtime.Decode(decoder, insightsRaw)
+	if err != nil {
+		return fmt.Errorf("failed to decode ClusterOperator insights file %s: %w", insightsPath, err)
+	}
+	switch insightsObj := insightsObj.(type) {
+	case *ouev1alpha1.ClusterOperatorProgressInsightList:
+		o.coInsights = *insightsObj
+	case *corev1.List:
+		list, err := asResourceList[ouev1alpha1.ClusterOperatorProgressInsight](insightsObj, decoder)
+		if err != nil {
+			return fmt.Errorf("error while parsing file %s: %w", insightsPath, err)
+		}
+		o.coInsights = ouev1alpha1.ClusterOperatorProgressInsightList{
+			Items: list,
+		}
+	default:
+		return fmt.Errorf("unexpected object type %T in ClusterOperator insights file %s", insightsObj, insightsPath)
+	}
+
+	for i := range o.coInsights.Items {
+		if now := mockNowFromClusterOperatorInsight(&o.coInsights.Items[i]); o.mockNow.Before(now) {
+			o.mockNow = now
+		}
+	}
+
+	return nil
+}
 
 // func (o *mockData) loadNodeInsights(decoder runtime.Decoder) error {
 // 	insightsPath := path.Join(o.path, "node-insights.yaml")

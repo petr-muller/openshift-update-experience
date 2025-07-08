@@ -1,0 +1,31 @@
+apiVersion: v1
+items:
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: etcd
+  spec: { }
+  status:
+    name: etcd
+    conditions:
+    - type: Updating
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "NodeInstaller"
+      message: "NodeInstallerProgressing: 2 nodes are at revision 33; 1 nodes are at revision 34"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: kube-apiserver
+  spec: { }
+  status:
+    name: kube-apiserver
+    conditions:
+    - type: Updating
+      status: "True"
+      lastTransitionTime: "2025-06-27T12:39:47Z"
+      reason: "NodeInstaller"
+      message: "NodeInstallerProgressing: 3 nodes are at revision 274; 0 nodes have achieved new revision 276"
+kind: List
+metadata:
+  resourceVersion: ""

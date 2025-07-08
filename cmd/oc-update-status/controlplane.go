@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/petr-muller/openshift-update-experience/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type assessmentState string
@@ -33,6 +35,37 @@ func (v versions) String() string {
 	return fmt.Sprintf("%s (from %s)", v.target, v.previous)
 }
 
+type operator struct {
+	Name      string
+	Condition metav1.Condition
+}
+
+type operators struct {
+	Total int
+	// Unavailable are operators that are not available
+	Unavailable []operator
+	// Degraded are operators that are available but degraded
+	Degraded []operator
+	// Updated are operators that updated its version, no matter its conditions
+	Updated []operator
+	// Waiting are operators that have not updated its version and are not progressing
+	Waiting []operator
+	// Updating are operators that have not updated its version but are progressing
+	Updating []operator
+}
+
+// TODO(muller): Uncomment as I add more functionality.
+// func (o operators) StatusSummary() string {
+// 	res := []string{fmt.Sprintf("%d Healthy", o.Total-o.Unavailable-o.Degraded)}
+// 	if o.Unavailable > 0 {
+// 		res = append(res, fmt.Sprintf("%d Unavailable", o.Unavailable))
+// 	}
+// 	if o.Degraded > 0 {
+// 		res = append(res, fmt.Sprintf("%d Available but degraded", o.Degraded))
+// 	}
+// 	return strings.Join(res, ", ")
+// }
+
 type controlPlaneStatusDisplayData struct {
 	Assessment assessmentState
 	// Completion           float64
@@ -40,20 +73,20 @@ type controlPlaneStatusDisplayData struct {
 	// Duration             time.Duration
 	// EstDuration          time.Duration
 	// EstTimeToComplete    time.Duration
-	// Operators            operators
+	Operators     operators
 	TargetVersion versions
 }
 
 const controlPlaneStatusTemplateRaw = `= Control Plane =
 Assessment:      {{ .Assessment }}
 Target Version:  {{ .TargetVersion }}
+{{ with commaJoinOperatorNames .Operators.Updating -}}
+Updating:        {{ . }}
+{{ end -}}
 `
 
 //nolint:lll
 // TODO(muller): Complete the template as I add more functionality.
-// {{ with commaJoin .Operators.Updating -}}
-// Updating:        {{ . }}
-// {{ end -}}
 // Completion:      {{ printf "%.0f" .Completion }}% ({{ .Operators.Updated }} operators updated, {{ len .Operators.Updating }} updating, {{ .Operators.Waiting }} waiting)
 // Duration:        {{ shortDuration .Duration }}{{ if .EstTimeToComplete }} (Est. Time Remaining: {{ vagueUnder .EstTimeToComplete .EstDuration .IsMultiArchMigration }}){{ end }}
 // Operator Health: {{ .Operators.StatusSummary }}
@@ -95,22 +128,20 @@ func vagueUnder(actual, estimated time.Duration, isMultiArchMigration bool) stri
 	}
 }
 
-// TODO(muller): Uncomment as I add more functionality.
-// func commaJoin(elems []UpdatingClusterOperator) string {
-// 	var names []string
-// 	for _, e := range elems {
-// 		names = append(names, e.Name)
-// 	}
-// 	return strings.Join(names, ", ")
-// }
+func commaJoinOperatorNames(elems []operator) string {
+	names := make([]string, 0, len(elems))
+	for _, e := range elems {
+		names = append(names, e.Name)
+	}
+	return strings.Join(names, ", ")
+}
 
 var controlPlaneStatusTemplate = template.Must(
 	template.New("controlPlaneStatus").
 		Funcs(template.FuncMap{
-			"shortDuration": shortDuration,
-			"vagueUnder":    vagueUnder,
-			// TODO(muller): Uncomment as I add more functionality.
-			// "commaJoin":     commaJoin,
+			"shortDuration":          shortDuration,
+			"vagueUnder":             vagueUnder,
+			"commaJoinOperatorNames": commaJoinOperatorNames,
 		}).
 		Parse(controlPlaneStatusTemplateRaw))
 
@@ -259,9 +290,34 @@ func versionsFromClusterVersionProgressInsight(insightVersions v1alpha1.ControlP
 	return v
 }
 
-func assessControlPlaneStatus(cv *v1alpha1.ClusterVersionProgressInsightStatus) controlPlaneStatusDisplayData {
+func assessControlPlaneStatus(
+	cv *v1alpha1.ClusterVersionProgressInsightStatus,
+	cos []v1alpha1.ClusterOperatorProgressInsightStatus,
+) controlPlaneStatusDisplayData {
 	var displayData controlPlaneStatusDisplayData
 	displayData.Assessment = assessmentState(cv.Assessment)
+
+	for _, co := range cos {
+		updating := meta.FindStatusCondition(co.Conditions, string(v1alpha1.ClusterOperatorProgressInsightUpdating))
+		if updating == nil {
+			continue
+		}
+
+		displayData.Operators.Total++
+
+		op := operator{Name: co.Name, Condition: *updating}
+		switch {
+		case updating.Status == metav1.ConditionTrue:
+			displayData.Operators.Updating = append(displayData.Operators.Updating, op)
+		case updating.Status == metav1.ConditionFalse &&
+			updating.Reason == string(v1alpha1.ClusterOperatorUpdatingReasonUpdated):
+			displayData.Operators.Updated = append(displayData.Operators.Updated, op)
+		case updating.Status == metav1.ConditionFalse &&
+			updating.Reason == string(v1alpha1.ClusterOperatorUpdatingReasonPending):
+			displayData.Operators.Waiting = append(displayData.Operators.Waiting, op)
+			// TODO(muller): Handle error cases (unknown, false with weird reasons)
+		}
+	}
 
 	// var insights []updateInsight
 
@@ -304,86 +360,6 @@ func assessControlPlaneStatus(cv *v1alpha1.ClusterVersionProgressInsightStatus) 
 
 	// var lastObservedProgress time.Time
 	// var mcoStartedUpdating time.Time
-
-	// for _, operator := range operators {
-	// 	var isPlatformOperator bool
-	// 	for annotation := range operator.Annotations {
-	// 		if strings.HasPrefix(annotation, "exclude.release.openshift.io/") ||
-	// 			strings.HasPrefix(annotation, "include.release.openshift.io/") {
-	// 			isPlatformOperator = true
-	// 			break
-	// 		}
-	// 	}
-	// 	if !isPlatformOperator {
-	// 		continue
-	// 	}
-	//
-	// 	var updated bool
-	// 	var mcoOperatorImageUpgrading bool
-	// 	if operator.Name == "machine-config" {
-	// 		for _, version := range operator.Status.Versions {
-	// 			if version.Name == "operator-image" {
-	// 				if mcoImagePullSpec != version.Version {
-	// 					mcoOperatorImageUpgrading = true
-	// 					break
-	// 				}
-	// 			}
-	// 		}
-	// 	}
-	//
-	// 	if operator.Name != "machine-config" || !mcoOperatorImageUpgrading {
-	// 		for _, version := range operator.Status.Versions {
-	// 			if version.Name == "operator" && version.Version == targetVersion {
-	// 				updated = true
-	// 				break
-	// 			}
-	// 		}
-	// 	}
-	//
-	// 	if updated {
-	// 		displayData.Operators.Updated++
-	// 	}
-	//
-	// 	var available *v1.ClusterOperatorStatusCondition
-	// 	var degraded *v1.ClusterOperatorStatusCondition
-	// 	var progressing *v1.ClusterOperatorStatusCondition
-	//
-	// 	displayData.Operators.Total++
-	// 	for _, condition := range operator.Status.Conditions {
-	// 		condition := condition
-	// 		switch {
-	// 		case condition.Type == v1.OperatorAvailable:
-	// 			available = &condition
-	// 		case condition.Type == v1.OperatorDegraded:
-	// 			degraded = &condition
-	// 		case condition.Type == v1.OperatorProgressing:
-	// 			progressing = &condition
-	// 		}
-	// 	}
-	//
-	// 	if progressing != nil {
-	// 		if progressing.LastTransitionTime.After(lastObservedProgress) {
-	// 			lastObservedProgress = progressing.LastTransitionTime.Time
-	// 		}
-	// 		if !updated && progressing.Status == v1.ConditionTrue {
-	// 			displayData.Operators.Updating = append(displayData.Operators.Updating,
-	// 				UpdatingClusterOperator{Name: operator.Name, Condition: progressing})
-	// 		}
-	// 		if !updated && progressing.Status == v1.ConditionFalse {
-	// 			displayData.Operators.Waiting++
-	// 		}
-	// 		if progressing.Status == v1.ConditionTrue && operator.Name == "machine-config" && !updated {
-	// 			mcoStartedUpdating = progressing.LastTransitionTime.Time
-	// 		}
-	// 	}
-	//
-	// 	if available == nil || available.Status != v1.ConditionTrue {
-	// 		displayData.Operators.Unavailable++
-	// 	} else if degraded != nil && degraded.Status == v1.ConditionTrue {
-	// 		displayData.Operators.Degraded++
-	// 	}
-	// 	insights = append(insights, coInsights(operator.Name, available, degraded, at)...)
-	// }
 
 	// controlPlaneCompleted := displayData.Operators.Updated == displayData.Operators.Total
 	// if controlPlaneCompleted {
