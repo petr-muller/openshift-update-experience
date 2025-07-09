@@ -18,12 +18,12 @@ package controller
 
 import (
 	"context"
-	"errors"
+	"fmt"
 
+	"github.com/google/go-cmp/cmp"
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -58,30 +58,30 @@ func NewClusterOperatorProgressInsightReconciler(client client.Client, scheme *r
 
 type deploymentGetter func(ctx context.Context, what types.NamespacedName) (appsv1.Deployment, error)
 
-var errOperatorImageNotImplemented = errors.New("operator-image not implemented in the versions from cluster operator's status")
+// var errOperatorImageNotImplemented = errors.New("operator-image not implemented in the versions from cluster operator's status")
 
-func getImagePullSpec(ctx context.Context, name string, getDeployment deploymentGetter) (string, error) {
-	// It is known that the image pull spec for co/machine-config can be accessed from the deployment
-	if name == "machine-config" {
-		mcoDeployment, err := getDeployment(ctx, types.NamespacedName{
-			Namespace: "openshift-machine-config-operator",
-			Name:      "machine-config-operator",
-		})
-		if err != nil {
-			return "", err
-		}
-		for _, c := range mcoDeployment.Spec.Template.Spec.Containers {
-			if c.Name == "machine-config-operator" {
-				return c.Image, nil
-			}
-		}
-		return "", errors.New("machine-config-operator container not found")
-	}
-	// We may add here retrieval of the image pull spec for other COs when they implement "operator-image" in the status.versions
-	return "", errOperatorImageNotImplemented
-}
+// func getImagePullSpec(ctx context.Context, name string, getDeployment deploymentGetter) (string, error) {
+// 	// It is known that the image pull spec for co/machine-config can be accessed from the deployment
+// 	if name == "machine-config" {
+// 		mcoDeployment, err := getDeployment(ctx, types.NamespacedName{
+// 			Namespace: "openshift-machine-config-operator",
+// 			Name:      "machine-config-operator",
+// 		})
+// 		if err != nil {
+// 			return "", err
+// 		}
+// 		for _, c := range mcoDeployment.Spec.Template.Spec.Containers {
+// 			if c.Name == "machine-config-operator" {
+// 				return c.Image, nil
+// 			}
+// 		}
+// 		return "", errors.New("machine-config-operator container not found")
+// 	}
+// 	// We may add here retrieval of the image pull spec for other COs when they implement "operator-image" in the status.versions
+// 	return "", errOperatorImageNotImplemented
+// }
 
-func assessClusterOperator(ctx context.Context, operator *openshiftconfigv1.ClusterOperator, targetVersion string, getDeployment deploymentGetter, now metav1.Time) (*ouev1alpha1.ClusterOperatorProgressInsightStatus, error) {
+func assessClusterOperator(_ context.Context, operator *openshiftconfigv1.ClusterOperator, targetVersion string, _ deploymentGetter, now metav1.Time) *ouev1alpha1.ClusterOperatorProgressInsightStatus {
 	updating := metav1.Condition{
 		Type:               string(ouev1alpha1.ClusterOperatorProgressInsightUpdating),
 		Status:             metav1.ConditionUnknown,
@@ -89,85 +89,89 @@ func assessClusterOperator(ctx context.Context, operator *openshiftconfigv1.Clus
 		LastTransitionTime: now,
 	}
 
-	imagePullSpec, err := getImagePullSpec(ctx, operator.Name, getDeployment)
-	if err != nil && !errors.Is(err, errOperatorImageNotImplemented) {
-		return nil, err
-	}
+	// imagePullSpec, err := getImagePullSpec(ctx, operator.Name, getDeployment)
+	// if err != nil && !errors.Is(err, errOperatorImageNotImplemented) {
+	// 	return nil, err
+	// }
 
-	noOperatorImageVersion := true
-	var operatorImageUpdated, versionUpdated bool
+	// noOperatorImageVersion := true
+	// var operatorImageUpdated bool
+	var versionUpdated bool
 	for _, version := range operator.Status.Versions {
-		if version.Name == "operator-image" {
-			noOperatorImageVersion = false
-			if imagePullSpec != "" && imagePullSpec == version.Version {
-				operatorImageUpdated = true
-			}
-		}
+		// if version.Name == "operator-image" {
+		// 	noOperatorImageVersion = false
+		// 	if imagePullSpec != "" && imagePullSpec == version.Version {
+		// 		operatorImageUpdated = true
+		// 	}
+		// }
 		if version.Name == "operator" && version.Version == targetVersion {
 			versionUpdated = true
 		}
 	}
 
-	// "operator-image" might not be implemented by every cluster operator
-	updated := (noOperatorImageVersion || operatorImageUpdated) && versionUpdated
-	if updated {
-		updating.Status = metav1.ConditionFalse
-		updating.Reason = string(ouev1alpha1.ClusterOperatorUpdatingReasonUpdated)
-	}
-
-	var available *openshiftconfigv1.ClusterOperatorStatusCondition
-	var degraded *openshiftconfigv1.ClusterOperatorStatusCondition
+	// var available *openshiftconfigv1.ClusterOperatorStatusCondition
+	// var degraded *openshiftconfigv1.ClusterOperatorStatusCondition
 	var progressing *openshiftconfigv1.ClusterOperatorStatusCondition
 
 	for _, condition := range operator.Status.Conditions {
 		switch condition.Type {
-		case openshiftconfigv1.OperatorAvailable:
-			available = &condition
-		case openshiftconfigv1.OperatorDegraded:
-			degraded = &condition
+		// case openshiftconfigv1.OperatorAvailable:
+		// 	available = &condition
+		// case openshiftconfigv1.OperatorDegraded:
+		// 	degraded = &condition
 		case openshiftconfigv1.OperatorProgressing:
 			progressing = &condition
 		}
 	}
 
-	if !updated && progressing != nil {
-		if progressing.Status == openshiftconfigv1.ConditionTrue {
-			updating.Status = metav1.ConditionTrue
-			updating.Reason = string(ouev1alpha1.ClusterOperatorUpdatingReasonProgressing)
-			updating.Message = progressing.Message
-		}
-		if progressing.Status == openshiftconfigv1.ConditionFalse {
-			updating.Status = metav1.ConditionFalse
-			updating.Reason = string(ouev1alpha1.ClusterOperatorUpdatingReasonPending)
-			updating.Message = progressing.Message
+	// "operator-image" might not be implemented by every cluster operator
+	// updated := (noOperatorImageVersion || operatorImageUpdated) && versionUpdated
+	updated := versionUpdated
+	if updated {
+		updating.Status = metav1.ConditionFalse
+		updating.Reason = string(ouev1alpha1.ClusterOperatorUpdatingReasonUpdated)
+	}
+
+	if progressing != nil {
+		updating.Message = fmt.Sprintf("Progressing=%s: %s", progressing.Status, progressing.Message)
+		if !updated {
+			if progressing.Status == openshiftconfigv1.ConditionTrue {
+				updating.Status = metav1.ConditionTrue
+				updating.Reason = string(ouev1alpha1.ClusterOperatorUpdatingReasonProgressing)
+			}
+			if progressing.Status == openshiftconfigv1.ConditionFalse {
+				updating.Status = metav1.ConditionFalse
+				updating.Reason = string(ouev1alpha1.ClusterOperatorUpdatingReasonPending)
+			}
 		}
 	}
 
-	health := metav1.Condition{
-		Type:               string(ouev1alpha1.ClusterOperatorProgressInsightHealthy),
-		Status:             metav1.ConditionTrue,
-		Reason:             string(ouev1alpha1.ClusterOperatorHealthyReasonAsExpected),
-		LastTransitionTime: now,
-	}
+	// health := metav1.Condition{
+	// 	Type:               string(ouev1alpha1.ClusterOperatorProgressInsightHealthy),
+	// 	Status:             metav1.ConditionTrue,
+	// 	Reason:             string(ouev1alpha1.ClusterOperatorHealthyReasonAsExpected),
+	// 	LastTransitionTime: now,
+	// }
 
-	if available == nil {
-		health.Status = metav1.ConditionUnknown
-		health.Reason = string(ouev1alpha1.ClusterOperatorHealthyReasonUnavailable)
-		health.Message = "The cluster operator is unavailable because the available condition is not found in the cluster operator's status"
-	} else if available.Status != openshiftconfigv1.ConditionTrue {
-		health.Status = metav1.ConditionFalse
-		health.Reason = string(ouev1alpha1.ClusterOperatorHealthyReasonUnavailable)
-		health.Message = available.Message
-	} else if degraded != nil && degraded.Status == openshiftconfigv1.ConditionTrue {
-		health.Status = metav1.ConditionFalse
-		health.Reason = string(ouev1alpha1.ClusterOperatorHealthyReasonDegraded)
-		health.Message = degraded.Message
-	}
+	// if available == nil {
+	// 	health.Status = metav1.ConditionUnknown
+	// 	health.Reason = string(ouev1alpha1.ClusterOperatorHealthyReasonUnavailable)
+	// 	health.Message = "The cluster operator is unavailable because the available condition is not found in the cluster operator's status"
+	// } else if available.Status != openshiftconfigv1.ConditionTrue {
+	// 	health.Status = metav1.ConditionFalse
+	// 	health.Reason = string(ouev1alpha1.ClusterOperatorHealthyReasonUnavailable)
+	// 	health.Message = available.Message
+	// } else if degraded != nil && degraded.Status == openshiftconfigv1.ConditionTrue {
+	// 	health.Status = metav1.ConditionFalse
+	// 	health.Reason = string(ouev1alpha1.ClusterOperatorHealthyReasonDegraded)
+	// 	health.Message = degraded.Message
+	// }
 
 	return &ouev1alpha1.ClusterOperatorProgressInsightStatus{
-		Name:       operator.Name,
-		Conditions: []metav1.Condition{updating, health},
-	}, nil
+		Name: operator.Name,
+		// Conditions: []metav1.Condition{updating, health},
+		Conditions: []metav1.Condition{updating},
+	}
 }
 
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=clusteroperatorprogressinsights,verbs=get;list;watch;create;update;patch;delete
@@ -176,13 +180,6 @@ func assessClusterOperator(ctx context.Context, operator *openshiftconfigv1.Clus
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the ClusterOperatorProgressInsight object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.4/pkg/reconcile
 func (r *ClusterOperatorProgressInsightReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
@@ -228,18 +225,19 @@ func (r *ClusterOperatorProgressInsightReconciler) Reconcile(ctx context.Context
 	targetVersion := clusterVersion.Status.Desired.Version
 
 	now := r.now()
-	getDeployment := func(ctx context.Context, what types.NamespacedName) (appsv1.Deployment, error) {
-		var deployment appsv1.Deployment
-		err := r.Get(ctx, what, &deployment)
-		return deployment, err
-	}
+	// getDeployment := func(ctx context.Context, what types.NamespacedName) (appsv1.Deployment, error) {
+	// 	var deployment appsv1.Deployment
+	// 	err := r.Get(ctx, what, &deployment)
+	// 	return deployment, err
+	// }
 
-	coInsight, err := assessClusterOperator(ctx, &clusterOperator, targetVersion, getDeployment, now)
-	if err != nil {
-		logger.WithValues("ClusterOperator", req.NamespacedName).Error(err, "Failed to assess ClusterOperator")
-		return ctrl.Result{}, err
-	}
-	progressInsight.Status = *coInsight
+	// coInsight, err := assessClusterOperator(ctx, &clusterOperator, targetVersion, getDeployment, now)
+	coInsight := assessClusterOperator(ctx, &clusterOperator, targetVersion, nil, now)
+	// if err != nil {
+	// 	logger.WithValues("ClusterOperator", req.NamespacedName).Error(err, "Failed to assess ClusterOperator")
+	// 	return ctrl.Result{}, err
+	// }
+
 	progressInsight.Name = clusterOperator.Name
 
 	if progressInsightNotFound {
@@ -247,9 +245,24 @@ func (r *ClusterOperatorProgressInsightReconciler) Reconcile(ctx context.Context
 			logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Error(err, "Failed to create ClusterOperatorProgressInsight")
 			return ctrl.Result{}, err
 		}
+
+		progressInsight.Status = *coInsight
+		if err := r.Status().Update(ctx, &progressInsight); err != nil {
+			logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Error(err, "Failed to update ClusterOperatorProgressInsight status")
+			return ctrl.Result{}, err
+		}
+
 		logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Info("Created ClusterOperatorProgressInsight")
 		return ctrl.Result{}, nil
 	}
+
+	diff := cmp.Diff(&progressInsight.Status, coInsight)
+	if diff == "" {
+		logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Info("No changes in ClusterOperatorProgressInsight, skipping update")
+		return ctrl.Result{}, nil
+	}
+	logger.Info(diff)
+	progressInsight.Status = *coInsight
 
 	if err := r.Client.Status().Update(ctx, &progressInsight); err != nil {
 		logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Error(err, "Failed to update ClusterOperatorProgressInsight status")
@@ -259,77 +272,146 @@ func (r *ClusterOperatorProgressInsightReconciler) Reconcile(ctx context.Context
 	return ctrl.Result{}, nil
 }
 
-type predicateStartedUpdating struct {
+type cvDesiredVersionChanged struct {
 	predicate.Funcs
 }
 
-func (p predicateStartedUpdating) Update(e event.UpdateEvent) bool {
-	before, ok := e.ObjectOld.(*ouev1alpha1.ClusterVersionProgressInsight)
-	if !ok {
-		return false
-	}
-	after, ok := e.ObjectNew.(*ouev1alpha1.ClusterVersionProgressInsight)
-	if !ok {
-		return false
-	}
+func (p cvDesiredVersionChanged) Update(e event.UpdateEvent) bool {
+	beforeObj := e.ObjectOld
+	afterObj := e.ObjectNew
 
-	updatingName := string(ouev1alpha1.ClusterVersionProgressInsightUpdating)
-	updatingAfter := meta.FindStatusCondition(after.Status.Conditions, updatingName)
-	if updatingAfter == nil || updatingAfter.Status != metav1.ConditionTrue {
-		return false
-	}
-
-	updatingBefore := meta.FindStatusCondition(before.Status.Conditions, updatingName)
-	return updatingBefore == nil || updatingBefore.Status != metav1.ConditionTrue
-}
-
-func (p predicateStartedUpdating) Create(e event.CreateEvent) bool {
-	insight, ok := e.Object.(*ouev1alpha1.ClusterVersionProgressInsight)
+	before, ok := beforeObj.(*openshiftconfigv1.ClusterVersion)
 	if !ok {
 		return false
 	}
 
-	updatingName := string(ouev1alpha1.ClusterVersionProgressInsightUpdating)
-	updating := meta.FindStatusCondition(insight.Status.Conditions, updatingName)
-	return updating != nil && updating.Status == metav1.ConditionTrue
-}
-
-func (p predicateStartedUpdating) Delete(_ event.DeleteEvent) bool {
-	return false
-}
-
-func (r *ClusterOperatorProgressInsightReconciler) allClusterOperatorsProgressInsightsMapFunc(ctx context.Context, _ client.Object) []reconcile.Request {
-	operators := &openshiftconfigv1.ClusterOperatorList{}
-	if err := r.List(ctx, operators); err != nil {
-		logf.FromContext(ctx).Error(err, "Failed to list ClusterOperators")
-		return nil
+	after, ok := afterObj.(*openshiftconfigv1.ClusterVersion)
+	if !ok {
+		return false
 	}
 
-	requests := make([]reconcile.Request, 0, len(operators.Items))
-	for _, operator := range operators.Items {
-		requests = append(requests, reconcile.Request{
-			NamespacedName: client.ObjectKey{Name: operator.Name},
-		})
-	}
-	return requests
+	return before.Status.Desired.Version != after.Status.Desired.Version
+
 }
+
+type cvHistoryChanged struct {
+	predicate.Funcs
+}
+
+func (p cvHistoryChanged) Update(e event.UpdateEvent) bool {
+	beforeObj := e.ObjectOld
+	afterObj := e.ObjectNew
+
+	before, ok := beforeObj.(*openshiftconfigv1.ClusterVersion)
+	if !ok {
+		return false
+	}
+
+	after, ok := afterObj.(*openshiftconfigv1.ClusterVersion)
+	if !ok {
+		return false
+	}
+
+	if len(before.Status.History) == 0 && len(after.Status.History) == 0 {
+		return false
+	}
+
+	if len(before.Status.History) != len(after.Status.History) {
+		return true
+	}
+
+	topBefore := before.Status.History[0]
+	topAfter := after.Status.History[0]
+
+	return topBefore.State != topAfter.State ||
+		topBefore.Version != topAfter.Version ||
+		topBefore.Image != topAfter.Image
+}
+
+type cvProgressingChanged struct {
+	predicate.Funcs
+}
+
+func (p cvProgressingChanged) Update(e event.UpdateEvent) bool {
+	beforeObj := e.ObjectOld
+	afterObj := e.ObjectNew
+
+	before, ok := beforeObj.(*openshiftconfigv1.ClusterVersion)
+	if !ok {
+		return false
+	}
+	after, ok := afterObj.(*openshiftconfigv1.ClusterVersion)
+	if !ok {
+		return false
+	}
+
+	progressingBefore := findOperatorStatusCondition(before.Status.Conditions, openshiftconfigv1.OperatorProgressing)
+	progressingAfter := findOperatorStatusCondition(after.Status.Conditions, openshiftconfigv1.OperatorProgressing)
+
+	if progressingBefore == nil && progressingAfter == nil {
+		return false
+	}
+
+	if progressingBefore == nil || progressingAfter == nil {
+		return true
+	}
+
+	return progressingBefore.Status != progressingAfter.Status
+}
+
+func allClusterOperators(c client.Client) handler.MapFunc {
+	return func(ctx context.Context, _ client.Object) []reconcile.Request {
+		operators := &openshiftconfigv1.ClusterOperatorList{}
+		if err := c.List(ctx, operators); err != nil {
+			logf.FromContext(ctx).Error(err, "Failed to list ClusterOperators")
+			// TODO(muller): Dropping is not ideal but not many good options here. Maybe we use a special
+			// reconcile key to trigger a special all-operator reconciliation
+			return nil
+		}
+
+		if len(operators.Items) == 0 {
+			return nil
+		}
+
+		requests := make([]reconcile.Request, 0, len(operators.Items))
+		for _, operator := range operators.Items {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: client.ObjectKey{Name: operator.Name},
+			})
+		}
+		return requests
+	}
+}
+
+var cvVersion = predicate.NewPredicateFuncs(
+	func(obj client.Object) bool {
+		return obj.GetName() == "version"
+	},
+)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterOperatorProgressInsightReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ouev1alpha1.ClusterOperatorProgressInsight{}).
-		Owns(&ouev1alpha1.UpdateHealthInsight{}, builder.WithPredicates(predicate.NewPredicateFuncs(func(o client.Object) bool {
-			return o.GetLabels()[labelUpdateHealthInsightManager] == "clusteroperator"
-		}))).
+		Owns(&ouev1alpha1.UpdateHealthInsight{},
+			builder.WithPredicates(
+				predicate.NewPredicateFuncs(func(o client.Object) bool {
+					return o.GetLabels()[labelUpdateHealthInsightManager] == "clusteroperator"
+				}),
+			),
+		).
 		Named("clusteroperatorprogressinsight").
 		Watches(
 			&openshiftconfigv1.ClusterOperator{},
 			&handler.EnqueueRequestForObject{},
 		).
 		Watches(
-			&ouev1alpha1.ClusterVersionProgressInsight{},
-			handler.EnqueueRequestsFromMapFunc(r.allClusterOperatorsProgressInsightsMapFunc),
-			builder.WithPredicates(predicateStartedUpdating{}),
+			&openshiftconfigv1.ClusterVersion{},
+			handler.EnqueueRequestsFromMapFunc(allClusterOperators(mgr.GetClient())),
+			builder.WithPredicates(
+				cvVersion,
+				predicate.Or(cvProgressingChanged{}, cvHistoryChanged{}, cvDesiredVersionChanged{}),
+			),
 		).
 		Complete(r)
 }
