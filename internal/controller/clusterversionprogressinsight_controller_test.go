@@ -29,6 +29,7 @@ import (
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -49,6 +50,15 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 				Expect(k8sClient.Delete(ctx, cv)).To(Succeed())
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{Name: "version"}, &openshiftconfigv1.ClusterVersion{})
+				}).Should(MatchError(ContainSubstring("not found")))
+			}
+
+			co := openshiftconfigv1.ClusterOperatorList{}
+			Expect(k8sClient.List(ctx, &co)).To(Succeed())
+			for _, item := range co.Items {
+				Expect(k8sClient.Delete(ctx, &item)).To(Succeed())
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: item.Name}, &openshiftconfigv1.ClusterOperator{})
 				}).Should(MatchError(ContainSubstring("not found")))
 			}
 
@@ -104,14 +114,109 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 				Version:     "4.18.16",
 				Image:       "quay.io/something/openshift-release:4.18.16-x86_64",
 			}
+
+			etcd15 = openshiftconfigv1.ClusterOperator{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "etcd",
+				},
+				Status: openshiftconfigv1.ClusterOperatorStatus{
+					Versions: []openshiftconfigv1.OperandVersion{
+						{
+							Name:    "operator",
+							Version: "4.18.15",
+						},
+					},
+				},
+			}
+
+			kubeAPIServer15 = openshiftconfigv1.ClusterOperator{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "kube-apiserver",
+				},
+				Status: openshiftconfigv1.ClusterOperatorStatus{
+					Versions: []openshiftconfigv1.OperandVersion{
+						{
+							Name:    "operator",
+							Version: "4.18.15",
+						},
+					},
+				},
+			}
+
+			kubeControllerManager15 = openshiftconfigv1.ClusterOperator{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "kube-controller-manager",
+				},
+				Status: openshiftconfigv1.ClusterOperatorStatus{
+					Versions: []openshiftconfigv1.OperandVersion{
+						{
+							Name:    "operator",
+							Version: "4.18.15",
+						},
+					},
+				},
+			}
+
+			etcd16 = openshiftconfigv1.ClusterOperator{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "etcd",
+				},
+				Status: openshiftconfigv1.ClusterOperatorStatus{
+					Versions: []openshiftconfigv1.OperandVersion{
+						{
+							Name:    "operator",
+							Version: "4.18.16",
+						},
+					},
+				},
+			}
+
+			kubeAPIServer16 = openshiftconfigv1.ClusterOperator{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "kube-apiserver",
+				},
+				Status: openshiftconfigv1.ClusterOperatorStatus{
+					Versions: []openshiftconfigv1.OperandVersion{
+						{
+							Name:    "operator",
+							Version: "4.18.16",
+						},
+					},
+				},
+			}
+
+			_ = openshiftconfigv1.ClusterOperator{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "kube-controller-manager",
+				},
+				Status: openshiftconfigv1.ClusterOperatorStatus{
+					Versions: []openshiftconfigv1.OperandVersion{
+						{
+							Name:    "operator",
+							Version: "4.18.16",
+						},
+					},
+				},
+			}
+
+			kubeControllerManagerNo = openshiftconfigv1.ClusterOperator{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "kube-controller-manager",
+				},
+				Status: openshiftconfigv1.ClusterOperatorStatus{
+					Versions: []openshiftconfigv1.OperandVersion{},
+				},
+			}
 		)
 
 		type testCase struct {
-			name           string
-			clusterVersion *openshiftconfigv1.ClusterVersion
+			name             string
+			clusterVersion   *openshiftconfigv1.ClusterVersion
+			clusterOperators []*openshiftconfigv1.ClusterOperator
 
 			expectedUpdatingCondition *metav1.Condition
 			expectedVersions          *openshiftv1alpha1.ControlPlaneUpdateVersions
+			expectedCompletion        *int32
 		}
 
 		DescribeTable("should create progress insight with matching status",
@@ -122,6 +227,15 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 
 				tc.clusterVersion.Status = *status
 				Expect(k8sClient.Status().Update(ctx, tc.clusterVersion)).To(Succeed())
+
+				By("Creating the input ClusterOperators")
+				for _, co := range tc.clusterOperators {
+					co := co.DeepCopy()
+					status := co.Status.DeepCopy()
+					Expect(k8sClient.Create(ctx, co)).To(Succeed())
+					co.Status = *status
+					Expect(k8sClient.Status().Update(ctx, co)).To(Succeed())
+				}
 
 				By("Reconciling to create the progress insight")
 				controllerReconciler := &ClusterVersionProgressInsightReconciler{
@@ -161,9 +275,17 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 					Expect(progressInsight.Status.Versions).To(Equal(*tc.expectedVersions))
 				}
 
+				if tc.expectedCompletion != nil {
+					By("Verifying the insight has expected completion")
+					Expect(progressInsight.Status.Completion).To(Equal(*tc.expectedCompletion))
+				}
+
 				By("Cleanup")
 				Expect(k8sClient.Delete(ctx, tc.clusterVersion)).To(Succeed())
 				Expect(k8sClient.Delete(ctx, progressInsight)).To(Succeed())
+				for _, co := range tc.clusterOperators {
+					Expect(k8sClient.Delete(ctx, co)).To(Succeed())
+				}
 			},
 			Entry("ClusterVersion with Progressing=False", testCase{
 				name: "ClusterVersion with Progressing=False",
@@ -175,10 +297,18 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 						Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
 							cvProgressingFalse15,
 						},
+						Desired: openshiftconfigv1.Release{
+							Version: "4.18.15",
+						},
 						History: []openshiftconfigv1.UpdateHistory{
 							cvHistoryCompleted15,
 						},
 					},
+				},
+				clusterOperators: []*openshiftconfigv1.ClusterOperator{
+					&etcd15,
+					&kubeAPIServer15,
+					&kubeControllerManager15,
 				},
 				expectedUpdatingCondition: &metav1.Condition{
 					Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
@@ -196,6 +326,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 						},
 					},
 				},
+				expectedCompletion: ptr.To(int32(100)),
 			}),
 			Entry("ClusterVersion with Progressing=True (installation)", testCase{
 				name: "ClusterVersion with Progressing=True (installation)",
@@ -207,10 +338,18 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 						Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
 							cvProgressingTrue16,
 						},
+						Desired: openshiftconfigv1.Release{
+							Version: "4.18.16",
+						},
 						History: []openshiftconfigv1.UpdateHistory{
 							cvHistoryPartial16,
 						},
 					},
+				},
+				clusterOperators: []*openshiftconfigv1.ClusterOperator{
+					&etcd16,
+					&kubeAPIServer16,
+					&kubeControllerManagerNo,
 				},
 				expectedUpdatingCondition: &metav1.Condition{
 					Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
@@ -228,9 +367,10 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 						},
 					},
 				},
+				expectedCompletion: ptr.To(int32(66)),
 			}),
 			Entry("ClusterVersion with Progressing=True (update)", testCase{
-				name: "ClusterVersion with Progressing=True (installation)",
+				name: "ClusterVersion with Progressing=True (update)",
 				clusterVersion: &openshiftconfigv1.ClusterVersion{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "version",
@@ -239,11 +379,19 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 						Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
 							cvProgressingTrue16,
 						},
+						Desired: openshiftconfigv1.Release{
+							Version: "4.18.16",
+						},
 						History: []openshiftconfigv1.UpdateHistory{
 							cvHistoryPartial16,
 							cvHistoryCompleted15,
 						},
 					},
+				},
+				clusterOperators: []*openshiftconfigv1.ClusterOperator{
+					&etcd16,
+					&kubeAPIServer15,
+					&kubeControllerManager15,
 				},
 				expectedUpdatingCondition: &metav1.Condition{
 					Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
@@ -259,6 +407,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 						Version: "4.18.15",
 					},
 				},
+				expectedCompletion: ptr.To(int32(33)),
 			}),
 			Entry("ClusterVersion with Progressing=True (update from partial)", testCase{
 				name: "ClusterVersion with Progressing=True (installation)",
@@ -270,11 +419,19 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 						Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
 							cvProgressingTrue16,
 						},
+						Desired: openshiftconfigv1.Release{
+							Version: "4.18.16",
+						},
 						History: []openshiftconfigv1.UpdateHistory{
 							cvHistoryPartial16,
 							cvHistoryPartial15,
 						},
 					},
+				},
+				clusterOperators: []*openshiftconfigv1.ClusterOperator{
+					&etcd15,
+					&kubeAPIServer15,
+					&kubeControllerManager15,
 				},
 				expectedUpdatingCondition: &metav1.Condition{
 					Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
@@ -295,6 +452,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 						},
 					},
 				},
+				expectedCompletion: ptr.To(int32(0)),
 			}),
 		)
 	})
@@ -835,12 +993,92 @@ func Test_AssessClusterVersion(t *testing.T) {
 			Version:     "4.18.16",
 			Image:       "quay.io/something/openshift-release:4.18.16-x86_64",
 		}
+
+		etcd15 = openshiftconfigv1.ClusterOperator{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "etcd",
+			},
+			Status: openshiftconfigv1.ClusterOperatorStatus{
+				Versions: []openshiftconfigv1.OperandVersion{
+					{
+						Name:    "operator",
+						Version: "4.18.15",
+					},
+				},
+			},
+		}
+
+		kubeAPIServer15 = openshiftconfigv1.ClusterOperator{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "kube-apiserver",
+			},
+			Status: openshiftconfigv1.ClusterOperatorStatus{
+				Versions: []openshiftconfigv1.OperandVersion{
+					{
+						Name:    "operator",
+						Version: "4.18.15",
+					},
+				},
+			},
+		}
+
+		kubeControllerManager15 = openshiftconfigv1.ClusterOperator{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "kube-controller-manager",
+			},
+			Status: openshiftconfigv1.ClusterOperatorStatus{
+				Versions: []openshiftconfigv1.OperandVersion{
+					{
+						Name:    "operator",
+						Version: "4.18.15",
+					},
+				},
+			},
+		}
+
+		etcd16 = openshiftconfigv1.ClusterOperator{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "etcd",
+			},
+			Status: openshiftconfigv1.ClusterOperatorStatus{
+				Versions: []openshiftconfigv1.OperandVersion{
+					{
+						Name:    "operator",
+						Version: "4.18.16",
+					},
+				},
+			},
+		}
+
+		kubeAPIServer16 = openshiftconfigv1.ClusterOperator{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "kube-apiserver",
+			},
+			Status: openshiftconfigv1.ClusterOperatorStatus{
+				Versions: []openshiftconfigv1.OperandVersion{
+					{
+						Name:    "operator",
+						Version: "4.18.16",
+					},
+				},
+			},
+		}
+
+		kubeControllerManagerNo = openshiftconfigv1.ClusterOperator{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "kube-controller-manager",
+			},
+			Status: openshiftconfigv1.ClusterOperatorStatus{
+				Versions: []openshiftconfigv1.OperandVersion{},
+			},
+		}
 	)
 
 	testCases := []struct {
 		name     string
 		cv       openshiftconfigv1.ClusterVersionStatus
 		previous openshiftv1alpha1.ClusterVersionProgressInsightStatus
+		cos      []openshiftconfigv1.ClusterOperator
 
 		expectedInsight        *openshiftv1alpha1.ClusterVersionProgressInsightStatus
 		expectedHealthInsights []*openshiftv1alpha1.UpdateHealthInsightStatus
@@ -855,8 +1093,14 @@ func Test_AssessClusterVersion(t *testing.T) {
 					cvHistoryCompleted15,
 				},
 			},
+			cos: []openshiftconfigv1.ClusterOperator{
+				etcd15,
+				kubeAPIServer15,
+				kubeControllerManager15,
+			},
 			expectedInsight: &openshiftv1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: openshiftv1alpha1.ClusterVersionAssessmentCompleted,
+				Completion: 100,
 				Conditions: []metav1.Condition{
 					{
 						Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
@@ -883,12 +1127,21 @@ func Test_AssessClusterVersion(t *testing.T) {
 				Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
 					cvProgressingTrue16,
 				},
+				Desired: openshiftconfigv1.Release{
+					Version: "4.18.16",
+				},
 				History: []openshiftconfigv1.UpdateHistory{
 					cvHistoryPartial16,
 				},
 			},
+			cos: []openshiftconfigv1.ClusterOperator{
+				etcd16,
+				kubeAPIServer16,
+				kubeControllerManagerNo,
+			},
 			expectedInsight: &openshiftv1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: openshiftv1alpha1.ClusterVersionAssessmentProgressing,
+				Completion: 66,
 				Conditions: []metav1.Condition{
 					{
 						Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
@@ -915,13 +1168,22 @@ func Test_AssessClusterVersion(t *testing.T) {
 				Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
 					cvProgressingTrue16,
 				},
+				Desired: openshiftconfigv1.Release{
+					Version: "4.18.16",
+				},
 				History: []openshiftconfigv1.UpdateHistory{
 					cvHistoryPartial16,
 					cvHistoryCompleted15,
 				},
 			},
+			cos: []openshiftconfigv1.ClusterOperator{
+				etcd16,
+				kubeAPIServer15,
+				kubeControllerManager15,
+			},
 			expectedInsight: &openshiftv1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: openshiftv1alpha1.ClusterVersionAssessmentProgressing,
+				Completion: 33,
 				Conditions: []metav1.Condition{
 					{
 						Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
@@ -951,8 +1213,14 @@ func Test_AssessClusterVersion(t *testing.T) {
 					cvHistoryPartial15,
 				},
 			},
+			cos: []openshiftconfigv1.ClusterOperator{
+				etcd15,
+				kubeAPIServer15,
+				kubeControllerManager15,
+			},
 			expectedInsight: &openshiftv1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: openshiftv1alpha1.ClusterVersionAssessmentProgressing,
+				Completion: 0,
 				Conditions: []metav1.Condition{
 					{
 						Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
@@ -981,7 +1249,6 @@ func Test_AssessClusterVersion(t *testing.T) {
 	// TODO(muller): Remove ignored fields as I add functionality
 	ignoreInProgressInsight := cmpopts.IgnoreFields(
 		openshiftv1alpha1.ClusterVersionProgressInsightStatus{},
-		"Completion",
 		"StartedAt",
 		"CompletedAt",
 		"EstimatedCompletedAt",
@@ -1003,13 +1270,94 @@ func Test_AssessClusterVersion(t *testing.T) {
 			}
 			tc.expectedInsight.Name = cv.Name
 
-			cvInsight, healthInsights := assessClusterVersion(cv, &tc.previous)
+			cos := openshiftconfigv1.ClusterOperatorList{}
+			cos.Items = append(cos.Items, tc.cos...)
+
+			cvInsight, healthInsights := assessClusterVersion(cv, &tc.previous, &cos)
 			if diff := cmp.Diff(tc.expectedInsight, cvInsight, ignoreInProgressInsight, ignoreLastTransitionTime); diff != "" {
 				t.Errorf("expected ClusterVersionProgressInsight mismatch (-want +got):\n%s", diff)
 			}
 
 			if diff := cmp.Diff(healthInsights, tc.expectedHealthInsights); diff != "" {
 				t.Errorf("expected UpdateHealthInsight mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func Test_coOperatorVersionChanged(t *testing.T) {
+	testCases := []struct {
+		name     string
+		before   []openshiftconfigv1.OperandVersion
+		after    []openshiftconfigv1.OperandVersion
+		expected bool
+	}{
+		{
+			name:     "no change in versions",
+			before:   []openshiftconfigv1.OperandVersion{{Name: "operator", Version: "1.0.0"}},
+			after:    []openshiftconfigv1.OperandVersion{{Name: "operator", Version: "1.0.0"}},
+			expected: false,
+		},
+		{
+			name:     "version changed",
+			before:   []openshiftconfigv1.OperandVersion{{Name: "operator", Version: "1.0.0"}},
+			after:    []openshiftconfigv1.OperandVersion{{Name: "operator", Version: "1.0.1"}},
+			expected: true,
+		},
+		{
+			name:     "operand version changed, operator version unchanged",
+			before:   []openshiftconfigv1.OperandVersion{{Name: "operator", Version: "1.0.0"}, {Name: "operand", Version: "1.0.0"}},
+			after:    []openshiftconfigv1.OperandVersion{{Name: "operator", Version: "1.0.0"}, {Name: "operand", Version: "1.0.1"}},
+			expected: false,
+		},
+		{
+			name:     "one side missing operator version",
+			before:   []openshiftconfigv1.OperandVersion{{Name: "operand", Version: "1.0.0"}},
+			after:    []openshiftconfigv1.OperandVersion{{Name: "operand", Version: "1.0.0"}, {Name: "operator", Version: "1.0.0"}},
+			expected: true,
+		},
+		{
+			name:     "both sides missing operator version",
+			before:   []openshiftconfigv1.OperandVersion{{Name: "operand", Version: "1.0.0"}},
+			after:    []openshiftconfigv1.OperandVersion{{Name: "operand", Version: "1.0.0"}},
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			coBefore := openshiftconfigv1.ClusterOperator{
+				ObjectMeta: metav1.ObjectMeta{Name: "authentication"},
+				Status:     openshiftconfigv1.ClusterOperatorStatus{Versions: tc.before},
+			}
+			coAfter := openshiftconfigv1.ClusterOperator{
+				ObjectMeta: metav1.ObjectMeta{Name: "authentication"},
+				Status:     openshiftconfigv1.ClusterOperatorStatus{Versions: tc.after},
+			}
+
+			create := event.CreateEvent{Object: &coAfter}
+			createResult := coOperatorVersionChanged.Create(create)
+			if !createResult {
+				t.Errorf("create: expected true, got false")
+			}
+
+			update := event.UpdateEvent{ObjectNew: &coAfter, ObjectOld: &coBefore}
+			updateResult := coOperatorVersionChanged.Update(update)
+			if updateResult != tc.expected {
+				t.Errorf("update: expected %v, got %v", tc.expected, updateResult)
+			}
+
+			deleted := event.DeleteEvent{Object: &coAfter}
+			deleteResult := coOperatorVersionChanged.Delete(deleted)
+			if !deleteResult {
+				t.Errorf("delete: expected true, got false")
+			}
+			generic := event.GenericEvent{Object: &coAfter}
+			genericResult := coOperatorVersionChanged.Generic(generic)
+			if !genericResult {
+				t.Errorf("generic: expected true, got false")
 			}
 		})
 	}

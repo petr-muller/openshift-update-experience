@@ -68,7 +68,7 @@ type operators struct {
 
 type controlPlaneStatusDisplayData struct {
 	Assessment assessmentState
-	// Completion           float64
+	Completion float64
 	// CompletionAt         time.Time
 	// Duration             time.Duration
 	// EstDuration          time.Duration
@@ -83,6 +83,7 @@ Target Version:  {{ .TargetVersion }}
 {{ with commaJoinOperatorNames .Operators.Updating -}}
 Updating:        {{ . }}
 {{ end -}}
+Completion:      {{ printf "%.0f" .Completion }}%
 `
 
 //nolint:lll
@@ -296,6 +297,7 @@ func assessControlPlaneStatus(
 ) controlPlaneStatusDisplayData {
 	var displayData controlPlaneStatusDisplayData
 	displayData.Assessment = assessmentState(cv.Assessment)
+	displayData.Completion = float64(cv.Completion)
 
 	for _, co := range cos {
 		updating := meta.FindStatusCondition(co.Conditions, string(v1alpha1.ClusterOperatorProgressInsightUpdating))

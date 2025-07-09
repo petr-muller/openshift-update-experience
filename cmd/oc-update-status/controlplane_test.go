@@ -164,10 +164,12 @@ func TestControlPlaneStatusDisplayDataWrite(t *testing.T) {
 					target:          "4.11.0",
 					isTargetInstall: true,
 				},
+				Completion: 3,
 			},
 			expected: `= Control Plane =
 Assessment:      Progressing
 Target Version:  4.11.0 (installation)
+Completion:      3%
 `,
 		},
 		{
@@ -178,10 +180,12 @@ Target Version:  4.11.0 (installation)
 					previous: "4.10.0",
 					target:   "4.11.0",
 				},
+				Completion: 33,
 			},
 			expected: `= Control Plane =
 Assessment:      Progressing
 Target Version:  4.11.0 (from 4.10.0)
+Completion:      33%
 `,
 		},
 		{
@@ -196,11 +200,13 @@ Target Version:  4.11.0 (from 4.10.0)
 					Total:    1,
 					Updating: []operator{{Name: "test-operator", Condition: updatingTrue}},
 				},
+				Completion: 66,
 			},
 			expected: `= Control Plane =
 Assessment:      Progressing
 Target Version:  4.11.0 (from 4.10.0)
 Updating:        test-operator
+Completion:      66%
 `,
 		},
 		{
@@ -215,10 +221,12 @@ Updating:        test-operator
 					previous: "4.10.0",
 					target:   "4.11.0",
 				},
+				Completion: 50,
 			},
 			expected: `= Control Plane =
 Assessment:      Progressing
 Target Version:  4.11.0 (from 4.10.0)
+Completion:      50%
 `,
 		},
 		{
@@ -233,10 +241,12 @@ Target Version:  4.11.0 (from 4.10.0)
 					previous: "4.10.0",
 					target:   "4.11.0",
 				},
+				Completion: 75,
 			},
 			expected: `= Control Plane =
 Assessment:      Progressing
 Target Version:  4.11.0 (from 4.10.0)
+Completion:      75%
 `,
 		},
 		{
@@ -248,10 +258,12 @@ Target Version:  4.11.0 (from 4.10.0)
 					target:            "4.11.0",
 					isPreviousPartial: true,
 				},
+				Completion: 50,
 			},
 			expected: `= Control Plane =
 Assessment:      Progressing
 Target Version:  4.11.0 (from incomplete 4.10.0)
+Completion:      50%
 `,
 		},
 		{
@@ -262,10 +274,12 @@ Target Version:  4.11.0 (from incomplete 4.10.0)
 					previous: "4.10.0",
 					target:   "4.11.0",
 				},
+				Completion: 100,
 			},
 			expected: `= Control Plane =
 Assessment:      Completed
 Target Version:  4.11.0 (from 4.10.0)
+Completion:      100%
 `,
 		},
 	}
@@ -308,46 +322,50 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 		cvInsight  *v1alpha1.ClusterVersionProgressInsightStatus
 		coInsights []v1alpha1.ClusterOperatorProgressInsightStatus
 		expected   controlPlaneStatusDisplayData
-	}{{
-		name: "Progressing update with pending ClusterOperator",
-		cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
-			Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
-			Versions: v1alpha1.ControlPlaneUpdateVersions{
-				Previous: &v1alpha1.Version{
-					Version: "4.10.0",
-				},
-				Target: v1alpha1.Version{
-					Version: "4.11.0",
-				},
-			},
-		},
-		coInsights: []v1alpha1.ClusterOperatorProgressInsightStatus{
-			{
-				Name:       "test-operator",
-				Conditions: []metav1.Condition{updatingFalsePending},
-			},
-		},
-		expected: controlPlaneStatusDisplayData{
-			Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
-			Operators: operators{
-				Total: 1,
-				Waiting: []operator{
-					{
-						Name:      "test-operator",
-						Condition: updatingFalsePending,
+	}{
+		{
+			name: "Progressing update with pending ClusterOperator",
+			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
+				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
+				Completion: 3,
+				Versions: v1alpha1.ControlPlaneUpdateVersions{
+					Previous: &v1alpha1.Version{
+						Version: "4.10.0",
+					},
+					Target: v1alpha1.Version{
+						Version: "4.11.0",
 					},
 				},
 			},
-			TargetVersion: versions{
-				previous: "4.10.0",
-				target:   "4.11.0",
+			coInsights: []v1alpha1.ClusterOperatorProgressInsightStatus{
+				{
+					Name:       "test-operator",
+					Conditions: []metav1.Condition{updatingFalsePending},
+				},
+			},
+			expected: controlPlaneStatusDisplayData{
+				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				Completion: 3,
+				Operators: operators{
+					Total: 1,
+					Waiting: []operator{
+						{
+							Name:      "test-operator",
+							Condition: updatingFalsePending,
+						},
+					},
+				},
+				TargetVersion: versions{
+					previous: "4.10.0",
+					target:   "4.11.0",
+				},
 			},
 		},
-	},
 		{
 			name: "Progressing update with updated ClusterOperator",
 			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
+				Completion: 66,
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Previous: &v1alpha1.Version{
 						Version: "4.10.0",
@@ -365,6 +383,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			},
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				Completion: 66,
 				Operators: operators{
 					Total: 1,
 					Updated: []operator{
@@ -384,6 +403,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			name: "Progressing update with updating ClusterOperator",
 			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
+				Completion: 50,
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Previous: &v1alpha1.Version{
 						Version: "4.10.0",
@@ -401,6 +421,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			},
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				Completion: 50,
 				Operators: operators{
 					Total: 1,
 					Updating: []operator{
@@ -420,6 +441,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			name: "Progressing update from partial previous",
 			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
+				Completion: 50,
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Previous: &v1alpha1.Version{
 						Version: "4.10.0",
@@ -436,6 +458,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			},
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				Completion: 50,
 				TargetVersion: versions{
 					previous:          "4.10.0",
 					target:            "4.11.0",
@@ -447,6 +470,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			name: "Progressing installation",
 			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
+				Completion: 3,
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Target: v1alpha1.Version{
 						Version: "4.11.0",
@@ -460,6 +484,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			},
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				Completion: 3,
 				TargetVersion: versions{
 					target:          "4.11.0",
 					isTargetInstall: true,
@@ -470,6 +495,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			name: "Completed installation",
 			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentCompleted,
+				Completion: 100,
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Target: v1alpha1.Version{
 						Version: "4.11.0",
@@ -483,6 +509,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			},
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentCompleted),
+				Completion: 100,
 				TargetVersion: versions{
 					target:          "4.11.0",
 					isTargetInstall: true,

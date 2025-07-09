@@ -58,6 +58,8 @@ func NewClusterOperatorProgressInsightReconciler(client client.Client, scheme *r
 
 type deploymentGetter func(ctx context.Context, what types.NamespacedName) (appsv1.Deployment, error)
 
+const operatorVersionName = "operator"
+
 // var errOperatorImageNotImplemented = errors.New("operator-image not implemented in the versions from cluster operator's status")
 
 // func getImagePullSpec(ctx context.Context, name string, getDeployment deploymentGetter) (string, error) {
@@ -104,7 +106,7 @@ func assessClusterOperator(_ context.Context, operator *openshiftconfigv1.Cluste
 		// 		operatorImageUpdated = true
 		// 	}
 		// }
-		if version.Name == "operator" && version.Version == targetVersion {
+		if version.Name == operatorVersionName && version.Version == targetVersion {
 			versionUpdated = true
 		}
 	}
@@ -404,6 +406,7 @@ func (r *ClusterOperatorProgressInsightReconciler) SetupWithManager(mgr ctrl.Man
 		Watches(
 			&openshiftconfigv1.ClusterOperator{},
 			&handler.EnqueueRequestForObject{},
+			// TODO(muller): Only OCP payload ClusterOperators (label/annotation)
 		).
 		Watches(
 			&openshiftconfigv1.ClusterVersion{},

@@ -30,15 +30,18 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
 )
@@ -202,7 +205,11 @@ func forcedHealthInsight(cv *openshiftconfigv1.ClusterVersion, now metav1.Time) 
 // It does not take previous status insight into account. Many fields of the status insights (such as completion) cannot
 // be properly calculated without also watching and processing ClusterOperators, so that functionality will need to be
 // added later.
-func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, previous *ouev1alpha1.ClusterVersionProgressInsightStatus) (*ouev1alpha1.ClusterVersionProgressInsightStatus, []*ouev1alpha1.UpdateHealthInsightStatus) {
+func assessClusterVersion(
+	cv *openshiftconfigv1.ClusterVersion,
+	previous *ouev1alpha1.ClusterVersionProgressInsightStatus,
+	cos *openshiftconfigv1.ClusterOperatorList,
+) (*ouev1alpha1.ClusterVersionProgressInsightStatus, []*ouev1alpha1.UpdateHealthInsightStatus) {
 	var lastHistoryItem *openshiftconfigv1.UpdateHistory
 	if len(cv.Status.History) > 0 {
 		lastHistoryItem = &cv.Status.History[0]
@@ -213,8 +220,26 @@ func assessClusterVersion(cv *openshiftconfigv1.ClusterVersion, previous *ouev1a
 
 	klog.V(2).Infof("CPI :: CV/%s :: Updating=%s Started=%s Completed=%s", cv.Name, updating.Status, startedAt, completedAt)
 
-	var assessment ouev1alpha1.ClusterVersionAssessment
+	cvTargetVersion := cv.Status.Desired.Version
+	var updatedOperators int32
+	for _, co := range cos.Items {
+		for i := range co.Status.Versions {
+			if co.Status.Versions[i].Name == operatorVersionName {
+				if co.Status.Versions[i].Version == cvTargetVersion {
+					updatedOperators++
+				}
+				break
+			}
+		}
+	}
+
 	var completion int32
+	if len(cos.Items) > 0 {
+		completion = int32(float64(updatedOperators) / float64(len(cos.Items)) * 100.0)
+	}
+
+	var assessment ouev1alpha1.ClusterVersionAssessment
+
 	switch updating.Status {
 	case metav1.ConditionTrue:
 		assessment = ouev1alpha1.ClusterVersionAssessmentProgressing
@@ -386,6 +411,13 @@ func (r *ClusterVersionProgressInsightReconciler) Reconcile(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 
+	// TODO(muller): Only OCP payload ClusterOperators (label/annotation)
+	var clusterOperators openshiftconfigv1.ClusterOperatorList
+	if err := r.List(ctx, &clusterOperators); err != nil {
+		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Error(err, "Failed to list ClusterOperators")
+		return ctrl.Result{}, err
+	}
+
 	if apierrors.IsNotFound(cvErr) && apierrors.IsNotFound(err) {
 		// If both ClusterVersion and ClusterVersionProgressInsight do not exist, we can return early
 		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Info("Both ClusterVersion and ClusterVersionProgressInsight do not exist, nothing to reconcile")
@@ -402,7 +434,7 @@ func (r *ClusterVersionProgressInsightReconciler) Reconcile(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 
-	cvInsight, healthInsights := assessClusterVersion(&clusterVersion, &progressInsight.Status)
+	cvInsight, healthInsights := assessClusterVersion(&clusterVersion, &progressInsight.Status, &clusterOperators)
 
 	if apierrors.IsNotFound(err) {
 		if err := r.Create(ctx, &progressInsight); err != nil {
@@ -446,15 +478,55 @@ func predicateForHealthInsightsManagedBy(controller string) predicate.Funcs {
 
 var healthInsightsManagedByClusterVersionProgressInsight = predicateForHealthInsightsManagedBy(controllerName)
 
+var coOperatorVersionChanged = predicate.Funcs{
+	UpdateFunc: func(e event.UpdateEvent) bool {
+		before, ok := e.ObjectOld.(*openshiftconfigv1.ClusterOperator)
+		if !ok {
+			return false
+		}
+		after, ok := e.ObjectNew.(*openshiftconfigv1.ClusterOperator)
+		if !ok {
+			return false
+		}
+
+		var oldVersion string
+		for i, version := range before.Status.Versions {
+			if version.Name == "operator" {
+				oldVersion = before.Status.Versions[i].Version
+				break
+			}
+		}
+		var newVersion string
+		for i, version := range after.Status.Versions {
+			if version.Name == "operator" {
+				newVersion = after.Status.Versions[i].Version
+				break
+			}
+		}
+		return oldVersion != newVersion
+	},
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterVersionProgressInsightReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ouev1alpha1.ClusterVersionProgressInsight{}).
-		Owns(&ouev1alpha1.UpdateHealthInsight{}, builder.WithPredicates(healthInsightsManagedByClusterVersionProgressInsight)).
+		Owns(
+			&ouev1alpha1.UpdateHealthInsight{},
+			builder.WithPredicates(healthInsightsManagedByClusterVersionProgressInsight),
+		).
 		Named("clusterversionprogressinsight").
 		Watches(
 			&openshiftconfigv1.ClusterVersion{},
 			&handler.EnqueueRequestForObject{},
+		).
+		Watches(
+			&openshiftconfigv1.ClusterOperator{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+				return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: "version"}}}
+			}),
+			// TODO(muller): Only OCP payload ClusterOperators (label/annotation)
+			builder.WithPredicates(coOperatorVersionChanged),
 		).
 		Complete(r)
 }
