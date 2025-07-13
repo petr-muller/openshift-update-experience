@@ -70,7 +70,7 @@ type controlPlaneStatusDisplayData struct {
 	Assessment assessmentState
 	Completion float64
 	// CompletionAt         time.Time
-	// Duration             time.Duration
+	Duration time.Duration
 	// EstDuration          time.Duration
 	// EstTimeToComplete    time.Duration
 	Operators     operators
@@ -85,6 +85,7 @@ Target Version:  {{ .TargetVersion }}
 Updating:        {{ . }}
 {{ end -}}
 Completion:      {{ printf "%.0f" .Completion }}% ({{ len .Operators.Updated }} operators updated, {{ len .Operators.Updating }} updating, {{ len .Operators.Waiting }} waiting)
+Duration:        {{ shortDuration .Duration }}
 `
 
 //nolint:lll
@@ -294,10 +295,27 @@ func versionsFromClusterVersionProgressInsight(insightVersions v1alpha1.ControlP
 func assessControlPlaneStatus(
 	cv *v1alpha1.ClusterVersionProgressInsightStatus,
 	cos []v1alpha1.ClusterOperatorProgressInsightStatus,
+
+	now time.Time,
 ) controlPlaneStatusDisplayData {
 	var displayData controlPlaneStatusDisplayData
 	displayData.Assessment = assessmentState(cv.Assessment)
 	displayData.Completion = float64(cv.Completion)
+
+	var updatingFor time.Duration
+	if cv.CompletedAt == nil {
+		updatingFor = now.Sub(cv.StartedAt.Time)
+	} else {
+		updatingFor = cv.CompletedAt.Sub(cv.StartedAt.Time)
+	}
+	// precision to seconds when under 60s
+	if updatingFor > 10*time.Minute {
+		displayData.Duration = updatingFor.Round(time.Minute)
+	} else {
+		displayData.Duration = updatingFor.Round(time.Second)
+	}
+
+	displayData.Duration = updatingFor
 
 	for _, co := range cos {
 		updating := meta.FindStatusCondition(co.Conditions, string(v1alpha1.ClusterOperatorProgressInsightUpdating))
@@ -323,7 +341,6 @@ func assessControlPlaneStatus(
 
 	// var insights []updateInsight
 
-	// targetVersion := cv.Status.Desired.Version
 	// cvGroupKind := scopeGroupKind{group: v1.GroupName, kind: clusterVersionKind}
 	// cvScope := scopeResource{kind: cvGroupKind, name: cv.Name}
 
@@ -377,8 +394,6 @@ func assessControlPlaneStatus(
 	// 	lastObservedProgress = mcoStartedUpdating
 	// }
 
-	// updatingFor is started until now
-	// var updatingFor time.Duration
 	// toLastObservedProgress is started until last observed progress
 	// var toLastObservedProgress time.Duration
 
@@ -393,13 +408,6 @@ func assessControlPlaneStatus(
 	// 		displayData.CompletionAt = currentHistoryItem.CompletionTime.Time
 	// 	} else {
 	// 		displayData.CompletionAt = at
-	// 	}
-	// 	updatingFor = displayData.CompletionAt.Sub(started)
-	// 	// precision to seconds when under 60s
-	// 	if updatingFor > 10*time.Minute {
-	// 		displayData.Duration = updatingFor.Round(time.Minute)
-	// 	} else {
-	// 		displayData.Duration = updatingFor.Round(time.Second)
 	// 	}
 	// }
 

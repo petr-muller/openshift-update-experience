@@ -205,7 +205,7 @@ func (o *options) Run(ctx context.Context) error {
 	// 	return fmt.Errorf("failed to get UpdateHealth insights: %w", err)
 	// }
 
-	controlPlaneStatusData := assessControlPlaneStatus(&cvInsight.Status, cos)
+	controlPlaneStatusData := assessControlPlaneStatus(&cvInsight.Status, cos, now)
 	_ = controlPlaneStatusData.Write(o.Out, o.enabledDetailed(detailedOutputOperators), now)
 
 	return nil

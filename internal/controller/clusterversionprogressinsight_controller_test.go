@@ -72,8 +72,8 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 			}
 		})
 
-		var minutesAgo [60]metav1.Time
 		now := metav1.Now()
+		var minutesAgo [60]metav1.Time
 		for i := 0; i < 60; i++ {
 			minutesAgo[i] = metav1.Time{Time: now.Add(-time.Duration(i) * time.Minute)}
 		}
@@ -83,20 +83,20 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 				Type:               openshiftconfigv1.OperatorProgressing,
 				Status:             openshiftconfigv1.ConditionFalse,
 				Message:            "Cluster version is 4.18.15",
-				LastTransitionTime: metav1.Now(),
+				LastTransitionTime: minutesAgo[20],
 			}
 
 			cvProgressingTrue16 = openshiftconfigv1.ClusterOperatorStatusCondition{
 				Type:               openshiftconfigv1.OperatorProgressing,
 				Status:             openshiftconfigv1.ConditionTrue,
 				Message:            "Working towards 4.18.16: 106 of 863 done (12% complete), waiting on etcd, kube-apiserver",
-				LastTransitionTime: metav1.Now(),
+				LastTransitionTime: minutesAgo[50],
 			}
 
 			cvHistoryCompleted15 = openshiftconfigv1.UpdateHistory{
 				State:          openshiftconfigv1.CompletedUpdate,
 				StartedTime:    minutesAgo[50],
-				CompletionTime: &minutesAgo[40],
+				CompletionTime: &minutesAgo[20],
 				Version:        "4.18.15",
 				Image:          "quay.io/something/openshift-release:4.18.15-x86_64",
 			}
@@ -110,7 +110,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 
 			cvHistoryPartial16 = openshiftconfigv1.UpdateHistory{
 				State:       openshiftconfigv1.PartialUpdate,
-				StartedTime: minutesAgo[30],
+				StartedTime: minutesAgo[10],
 				Version:     "4.18.16",
 				Image:       "quay.io/something/openshift-release:4.18.16-x86_64",
 			}
@@ -217,6 +217,9 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 			expectedUpdatingCondition *metav1.Condition
 			expectedVersions          *openshiftv1alpha1.ControlPlaneUpdateVersions
 			expectedCompletion        *int32
+			expectedStartedAt         *metav1.Time
+			// completed is a pointer so distinguish when to test and when to check for nil
+			expectedCompletedAt **metav1.Time
 		}
 
 		DescribeTable("should create progress insight with matching status",
@@ -280,6 +283,20 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 					Expect(progressInsight.Status.Completion).To(Equal(*tc.expectedCompletion))
 				}
 
+				if tc.expectedStartedAt != nil {
+					By("Verifying the insight has expected started at time")
+					Expect(progressInsight.Status.StartedAt.Time).To(BeTemporally("~", tc.expectedStartedAt.Time, time.Second))
+				}
+
+				if tc.expectedCompletedAt != nil {
+					By("Verifying the insight has expected completed at time")
+					if *tc.expectedCompletedAt != nil {
+						Expect(progressInsight.Status.CompletedAt.Time).To(BeTemporally("~", (*tc.expectedCompletedAt).Time, time.Second))
+					} else {
+						Expect(progressInsight.Status.CompletedAt).To(BeNil())
+					}
+				}
+
 				By("Cleanup")
 				Expect(k8sClient.Delete(ctx, tc.clusterVersion)).To(Succeed())
 				Expect(k8sClient.Delete(ctx, progressInsight)).To(Succeed())
@@ -326,7 +343,9 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 						},
 					},
 				},
-				expectedCompletion: ptr.To(int32(100)),
+				expectedCompletion:  ptr.To(int32(100)),
+				expectedStartedAt:   &cvHistoryCompleted15.StartedTime,
+				expectedCompletedAt: &cvHistoryCompleted15.CompletionTime,
 			}),
 			Entry("ClusterVersion with Progressing=True (installation)", testCase{
 				name: "ClusterVersion with Progressing=True (installation)",
@@ -367,7 +386,9 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 						},
 					},
 				},
-				expectedCompletion: ptr.To(int32(66)),
+				expectedCompletion:  ptr.To(int32(66)),
+				expectedStartedAt:   &cvHistoryPartial16.StartedTime,
+				expectedCompletedAt: ptr.To[*metav1.Time](nil),
 			}),
 			Entry("ClusterVersion with Progressing=True (update)", testCase{
 				name: "ClusterVersion with Progressing=True (update)",
@@ -407,7 +428,9 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 						Version: "4.18.15",
 					},
 				},
-				expectedCompletion: ptr.To(int32(33)),
+				expectedCompletion:  ptr.To(int32(33)),
+				expectedStartedAt:   &cvHistoryPartial16.StartedTime,
+				expectedCompletedAt: ptr.To[*metav1.Time](nil),
 			}),
 			Entry("ClusterVersion with Progressing=True (update from partial)", testCase{
 				name: "ClusterVersion with Progressing=True (installation)",
@@ -452,7 +475,9 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 						},
 					},
 				},
-				expectedCompletion: ptr.To(int32(0)),
+				expectedCompletion:  ptr.To(int32(0)),
+				expectedStartedAt:   &cvHistoryPartial16.StartedTime,
+				expectedCompletedAt: ptr.To[*metav1.Time](nil),
 			}),
 		)
 	})
@@ -951,8 +976,8 @@ func Test_ForcedHealthInsight(t *testing.T) {
 func Test_AssessClusterVersion(t *testing.T) {
 	t.Parallel()
 
-	var minutesAgo [60]metav1.Time
 	now := metav1.Now()
+	var minutesAgo [60]metav1.Time
 	for i := 0; i < 60; i++ {
 		minutesAgo[i] = metav1.Time{Time: now.Add(-time.Duration(i) * time.Minute)}
 	}
@@ -962,14 +987,14 @@ func Test_AssessClusterVersion(t *testing.T) {
 			Type:               openshiftconfigv1.OperatorProgressing,
 			Status:             openshiftconfigv1.ConditionFalse,
 			Message:            "Cluster version is 4.18.15",
-			LastTransitionTime: metav1.Now(),
+			LastTransitionTime: minutesAgo[40],
 		}
 
 		cvProgressingTrue16 = openshiftconfigv1.ClusterOperatorStatusCondition{
 			Type:               openshiftconfigv1.OperatorProgressing,
 			Status:             openshiftconfigv1.ConditionTrue,
 			Message:            "Working towards 4.18.16: 106 of 863 done (12% complete), waiting on etcd, kube-apiserver",
-			LastTransitionTime: metav1.Now(),
+			LastTransitionTime: minutesAgo[30],
 		}
 
 		cvHistoryCompleted15 = openshiftconfigv1.UpdateHistory{
@@ -1109,6 +1134,8 @@ func Test_AssessClusterVersion(t *testing.T) {
 						Message: "ClusterVersion has Progressing=False(Reason=) | Message='Cluster version is 4.18.15'",
 					},
 				},
+				StartedAt:   cvHistoryCompleted15.StartedTime,
+				CompletedAt: cvHistoryCompleted15.CompletionTime,
 				Versions: openshiftv1alpha1.ControlPlaneUpdateVersions{
 					Target: openshiftv1alpha1.Version{
 						Version: "4.18.15",
@@ -1150,6 +1177,7 @@ func Test_AssessClusterVersion(t *testing.T) {
 						Message: "ClusterVersion has Progressing=True(Reason=) | Message='Working towards 4.18.16: 106 of 863 done (12% complete), waiting on etcd, kube-apiserver'",
 					},
 				},
+				StartedAt: cvHistoryPartial16.StartedTime,
 				Versions: openshiftv1alpha1.ControlPlaneUpdateVersions{
 					Target: openshiftv1alpha1.Version{
 						Version: "4.18.16",
@@ -1192,6 +1220,7 @@ func Test_AssessClusterVersion(t *testing.T) {
 						Message: "ClusterVersion has Progressing=True(Reason=) | Message='Working towards 4.18.16: 106 of 863 done (12% complete), waiting on etcd, kube-apiserver'",
 					},
 				},
+				StartedAt: cvHistoryPartial16.StartedTime,
 				Versions: openshiftv1alpha1.ControlPlaneUpdateVersions{
 					Target: openshiftv1alpha1.Version{
 						Version: "4.18.16",
@@ -1229,6 +1258,7 @@ func Test_AssessClusterVersion(t *testing.T) {
 						Message: "ClusterVersion has Progressing=True(Reason=) | Message='Working towards 4.18.16: 106 of 863 done (12% complete), waiting on etcd, kube-apiserver'",
 					},
 				},
+				StartedAt: cvHistoryPartial16.StartedTime,
 				Versions: openshiftv1alpha1.ControlPlaneUpdateVersions{
 					Target: openshiftv1alpha1.Version{
 						Version: "4.18.16",
@@ -1249,8 +1279,6 @@ func Test_AssessClusterVersion(t *testing.T) {
 	// TODO(muller): Remove ignored fields as I add functionality
 	ignoreInProgressInsight := cmpopts.IgnoreFields(
 		openshiftv1alpha1.ClusterVersionProgressInsightStatus{},
-		"StartedAt",
-		"CompletedAt",
 		"EstimatedCompletedAt",
 	)
 	ignoreLastTransitionTime := cmpopts.IgnoreFields(

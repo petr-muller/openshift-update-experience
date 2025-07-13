@@ -160,27 +160,26 @@ func TestControlPlaneStatusDisplayDataWrite(t *testing.T) {
 			name: "Progressing installation",
 			data: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				Completion: 3,
+				Duration:   10 * time.Minute,
 				TargetVersion: versions{
 					target:          "4.11.0",
 					isTargetInstall: true,
 				},
-				Completion: 3,
 			},
 			expected: `= Control Plane =
 Assessment:      Progressing
 Target Version:  4.11.0 (installation)
 Completion:      3% (0 operators updated, 0 updating, 0 waiting)
+Duration:        10m
 `,
 		},
 		{
 			name: "Progressing update",
 			data: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
-				TargetVersion: versions{
-					previous: "4.10.0",
-					target:   "4.11.0",
-				},
 				Completion: 33,
+				Duration:   36 * time.Second,
 				Operators: operators{
 					Total: 3,
 					Updated: []operator{
@@ -193,18 +192,25 @@ Completion:      3% (0 operators updated, 0 updating, 0 waiting)
 						{Name: "test-operator-3", Condition: updatingTrue},
 					},
 				},
+				TargetVersion: versions{
+					previous: "4.10.0",
+					target:   "4.11.0",
+				},
 			},
 			expected: `= Control Plane =
 Assessment:      Progressing
 Target Version:  4.11.0 (from 4.10.0)
 Updating:        test-operator-3
 Completion:      33% (1 operators updated, 1 updating, 1 waiting)
+Duration:        36s
 `,
 		},
 		{
 			name: "Progressing update with pending operator",
 			data: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				Completion: 50,
+				Duration:   80 * time.Minute,
 				Operators: operators{
 					Total: 1,
 					Updated: []operator{
@@ -218,24 +224,25 @@ Completion:      33% (1 operators updated, 1 updating, 1 waiting)
 					previous: "4.10.0",
 					target:   "4.11.0",
 				},
-				Completion: 50,
 			},
 			expected: `= Control Plane =
 Assessment:      Progressing
 Target Version:  4.11.0 (from 4.10.0)
 Completion:      50% (1 operators updated, 0 updating, 1 waiting)
+Duration:        1h20m
 `,
 		},
 		{
 			name: "Progressing update from partial",
 			data: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+				Completion: 50,
+				Duration:   20 * time.Minute,
 				TargetVersion: versions{
 					previous:          "4.10.0",
 					target:            "4.11.0",
 					isPreviousPartial: true,
 				},
-				Completion: 50,
 				Operators: operators{
 					Total: 2,
 					Updated: []operator{
@@ -250,12 +257,14 @@ Completion:      50% (1 operators updated, 0 updating, 1 waiting)
 Assessment:      Progressing
 Target Version:  4.11.0 (from incomplete 4.10.0)
 Completion:      50% (1 operators updated, 0 updating, 1 waiting)
+Duration:        20m
 `,
 		},
 		{
 			name: "Completed",
 			data: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentCompleted),
+				Duration:   56 * time.Minute,
 				TargetVersion: versions{
 					previous: "4.10.0",
 					target:   "4.11.0",
@@ -272,6 +281,7 @@ Completion:      50% (1 operators updated, 0 updating, 1 waiting)
 Assessment:      Completed
 Target Version:  4.11.0 (from 4.10.0)
 Completion:      100% (1 operators updated, 0 updating, 0 waiting)
+Duration:        56m
 `,
 		},
 	}
@@ -290,6 +300,14 @@ Completion:      100% (1 operators updated, 0 updating, 0 waiting)
 }
 
 func Test_assessControlPlaneStatus(t *testing.T) {
+
+	t.Parallel()
+	now := time.Now()
+	var minutesAgo [60]metav1.Time
+	for i := range minutesAgo {
+		minutesAgo[i] = metav1.NewTime(now.Add(-time.Duration(i) * time.Minute))
+	}
+
 	updatingTrue := metav1.Condition{
 		Type:    string(v1alpha1.ClusterOperatorProgressInsightUpdating),
 		Status:  metav1.ConditionTrue,
@@ -320,6 +338,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
 				Completion: 3,
+				StartedAt:  minutesAgo[50],
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Previous: &v1alpha1.Version{
 						Version: "4.10.0",
@@ -338,6 +357,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
 				Completion: 3,
+				Duration:   50 * time.Minute,
 				Operators: operators{
 					Total: 1,
 					Waiting: []operator{
@@ -358,6 +378,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
 				Completion: 66,
+				StartedAt:  minutesAgo[40],
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Previous: &v1alpha1.Version{
 						Version: "4.10.0",
@@ -376,6 +397,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
 				Completion: 66,
+				Duration:   40 * time.Minute,
 				Operators: operators{
 					Total: 1,
 					Updated: []operator{
@@ -396,6 +418,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
 				Completion: 50,
+				StartedAt:  minutesAgo[30],
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Previous: &v1alpha1.Version{
 						Version: "4.10.0",
@@ -414,6 +437,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
 				Completion: 50,
+				Duration:   30 * time.Minute,
 				Operators: operators{
 					Total: 1,
 					Updating: []operator{
@@ -434,6 +458,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
 				Completion: 50,
+				StartedAt:  minutesAgo[20],
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Previous: &v1alpha1.Version{
 						Version: "4.10.0",
@@ -451,6 +476,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
 				Completion: 50,
+				Duration:   20 * time.Minute,
 				TargetVersion: versions{
 					previous:          "4.10.0",
 					target:            "4.11.0",
@@ -463,6 +489,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
 				Completion: 3,
+				StartedAt:  metav1.NewTime(minutesAgo[5].Add(-42 * time.Second)),
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Target: v1alpha1.Version{
 						Version: "4.11.0",
@@ -477,6 +504,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
 				Completion: 3,
+				Duration:   5*time.Minute + 42*time.Second,
 				TargetVersion: versions{
 					target:          "4.11.0",
 					isTargetInstall: true,
@@ -486,8 +514,10 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 		{
 			name: "Completed installation",
 			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
-				Assessment: v1alpha1.ClusterVersionAssessmentCompleted,
-				Completion: 100,
+				Assessment:  v1alpha1.ClusterVersionAssessmentCompleted,
+				Completion:  100,
+				StartedAt:   minutesAgo[50],
+				CompletedAt: &minutesAgo[10],
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Target: v1alpha1.Version{
 						Version: "4.11.0",
@@ -501,6 +531,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 			},
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentCompleted),
+				Duration:   40 * time.Minute,
 				Completion: 100,
 				TargetVersion: versions{
 					target:          "4.11.0",
@@ -512,7 +543,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := assessControlPlaneStatus(tc.cvInsight, tc.coInsights)
+			result := assessControlPlaneStatus(tc.cvInsight, tc.coInsights, now)
 			if diff := cmp.Diff(tc.expected, result, cmp.AllowUnexported(versions{})); diff != "" {
 				t.Errorf("assessControlPlaneStatus() mismatch (-expected +got):\n%s", diff)
 			}
