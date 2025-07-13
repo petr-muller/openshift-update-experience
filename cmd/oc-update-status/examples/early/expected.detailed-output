@@ -2,4 +2,4 @@
 Assessment:      Progressing
 Target Version:  4.15.0-ec.2 (from incomplete 4.14.1)
 Updating:        etcd, kube-apiserver
-Completion:      3%
+Completion:      3% (1 operators updated, 2 updating, 30 waiting)

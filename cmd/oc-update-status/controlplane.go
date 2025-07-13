@@ -77,18 +77,18 @@ type controlPlaneStatusDisplayData struct {
 	TargetVersion versions
 }
 
+//nolint:lll
 const controlPlaneStatusTemplateRaw = `= Control Plane =
 Assessment:      {{ .Assessment }}
 Target Version:  {{ .TargetVersion }}
 {{ with commaJoinOperatorNames .Operators.Updating -}}
 Updating:        {{ . }}
 {{ end -}}
-Completion:      {{ printf "%.0f" .Completion }}%
+Completion:      {{ printf "%.0f" .Completion }}% ({{ len .Operators.Updated }} operators updated, {{ len .Operators.Updating }} updating, {{ len .Operators.Waiting }} waiting)
 `
 
 //nolint:lll
 // TODO(muller): Complete the template as I add more functionality.
-// Completion:      {{ printf "%.0f" .Completion }}% ({{ .Operators.Updated }} operators updated, {{ len .Operators.Updating }} updating, {{ .Operators.Waiting }} waiting)
 // Duration:        {{ shortDuration .Duration }}{{ if .EstTimeToComplete }} (Est. Time Remaining: {{ vagueUnder .EstTimeToComplete .EstDuration .IsMultiArchMigration }}){{ end }}
 // Operator Health: {{ .Operators.StatusSummary }}
 

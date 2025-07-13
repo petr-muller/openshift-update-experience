@@ -3,6 +3,32 @@ items:
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
+    name: authentication
+  spec: { }
+  status:
+    name: authentication
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AuthenticatorCertKeyProgressing: All is well"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: baremetal
+  spec: { }
+  status:
+    name: baremetal
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: WaitingForProvisioningCR"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
     name: etcd
   spec: { }
   status:
@@ -12,7 +38,7 @@ items:
       status: "True"
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "NodeInstaller"
-      message: "NodeInstallerProgressing: 2 nodes are at revision 33; 1 nodes are at revision 34"
+      message: "Progressing=True: NodeInstallerProgressing: 2 nodes are at revision 33; 1 nodes are at revision 34"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -25,7 +51,384 @@ items:
       status: "True"
       lastTransitionTime: "2025-06-27T12:39:47Z"
       reason: "NodeInstaller"
-      message: "NodeInstallerProgressing: 3 nodes are at revision 274; 0 nodes have achieved new revision 276"
+      message: "Progressing=True: NodeInstallerProgressing: 3 nodes are at revision 274; 0 nodes have achieved new revision 276"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: cloud-controller-manager
+  spec: { }
+  status:
+    name: cloud-controller-manager
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: cloud-credential
+  spec: { }
+  status:
+    name: cloud-credential
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected: All is well"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: cluster-autoscaler
+  spec: { }
+  status:
+    name: cluster-autoscaler
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: "
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: config-operator
+  spec: { }
+  status:
+    name: config-operator
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Updated"
+      message: "Progressing=False: AsExpected: All is well"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: console
+  spec: { }
+  status:
+    name: console
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected: All is well"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: control-plane-machine-set
+  spec: { }
+  status:
+    name: control-plane-machine-set
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: csi-snapshot-controller
+  spec: { }
+  status:
+    name: csi-snapshot-controller
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected: All is well"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: dns
+  spec: { }
+  status:
+    name: dns
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected: Desired and current number of DNSes are equal"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: image-registry
+  spec: { }
+  status:
+    name: image-registry
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: Ready: Progressing: The registry is ready..."
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: ingress
+  spec: { }
+  status:
+    name: ingress
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected: desired and current number of IngressControllers are equal"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: insights
+  spec: { }
+  status:
+    name: insights
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected: Monitoring the cluster"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: kube-controller-manager
+  spec: { }
+  status:
+    name: kube-controller-manager
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected: NodeInstallerProgressing: 3 nodes are at revision 111"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: kube-scheduler
+  spec: { }
+  status:
+    name: kube-scheduler
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected: NodeInstallerProgressing: 3 nodes are at revision 85"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: kube-storage-version-migrator
+  spec: { }
+  status:
+    name: kube-storage-version-migrator
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected: All is well"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: machine-api
+  spec: { }
+  status:
+    name: machine-api
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: machine-approver
+  spec: { }
+  status:
+    name: machine-approver
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: machine-config
+  spec: { }
+  status:
+    name: machine-config
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: Cluster version is 4.14.1"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: marketplace
+  spec: { }
+  status:
+    name: marketplace
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: OperatorAvailable: Successfully progressed to release version: 4.14.1"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: monitoring
+  spec: { }
+  status:
+    name: monitoring
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: "
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: network
+  spec: { }
+  status:
+    name: network
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: "
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: node-tuning
+  spec: { }
+  status:
+    name: node-tuning
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected: Cluster version is \"4.14.1\""
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: openshift-apiserver
+  spec: { }
+  status:
+    name: openshift-apiserver
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected: All is well"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: openshift-controller-manager
+  spec: { }
+  status:
+    name: openshift-controller-manager
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected: All is well"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: openshift-samples
+  spec: { }
+  status:
+    name: openshift-samples
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: Samples installation successful at 4.14.1"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: operator-lifecycle-manager
+  spec: { }
+  status:
+    name: operator-lifecycle-manager
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: Deployed 4.14.0-202310201027.p0.gf515d1c.assembly.stream"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: operator-lifecycle-manager-catalog
+  spec: { }
+  status:
+    name: operator-lifecycle-manager-catalog
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: Deployed 4.14.0-202310201027.p0.gf515d1c.assembly.stream"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: operator-lifecycle-manager-packageserver
+  spec: { }
+  status:
+    name: operator-lifecycle-manager-packageserver
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: Deployed version 0.0.1-snapshot"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: service-ca
+  spec: { }
+  status:
+    name: service-ca
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected: Progressing: All service-ca-operator deployments updated"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: ClusterOperatorProgressInsight
+  metadata:
+    name: storage
+  spec: { }
+  status:
+    name: storage
+    conditions:
+    - type: Updating
+      status: "False"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "Pending"
+      message: "Progressing=False: AsExpected: AWSEBSCSIDriverOperatorCRProgressing: All is well"
 kind: List
 metadata:
   resourceVersion: ""

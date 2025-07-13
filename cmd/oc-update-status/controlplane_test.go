@@ -169,7 +169,7 @@ func TestControlPlaneStatusDisplayDataWrite(t *testing.T) {
 			expected: `= Control Plane =
 Assessment:      Progressing
 Target Version:  4.11.0 (installation)
-Completion:      3%
+Completion:      3% (0 operators updated, 0 updating, 0 waiting)
 `,
 		},
 		{
@@ -181,32 +181,24 @@ Completion:      3%
 					target:   "4.11.0",
 				},
 				Completion: 33,
-			},
-			expected: `= Control Plane =
-Assessment:      Progressing
-Target Version:  4.11.0 (from 4.10.0)
-Completion:      33%
-`,
-		},
-		{
-			name: "Progressing update with updating operator",
-			data: controlPlaneStatusDisplayData{
-				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
-				TargetVersion: versions{
-					previous: "4.10.0",
-					target:   "4.11.0",
-				},
 				Operators: operators{
-					Total:    1,
-					Updating: []operator{{Name: "test-operator", Condition: updatingTrue}},
+					Total: 3,
+					Updated: []operator{
+						{Name: "test-operator-1", Condition: updatingFalseUpdated},
+					},
+					Waiting: []operator{
+						{Name: "test-operator-2", Condition: updatingFalsePending},
+					},
+					Updating: []operator{
+						{Name: "test-operator-3", Condition: updatingTrue},
+					},
 				},
-				Completion: 66,
 			},
 			expected: `= Control Plane =
 Assessment:      Progressing
 Target Version:  4.11.0 (from 4.10.0)
-Updating:        test-operator
-Completion:      66%
+Updating:        test-operator-3
+Completion:      33% (1 operators updated, 1 updating, 1 waiting)
 `,
 		},
 		{
@@ -214,8 +206,13 @@ Completion:      66%
 			data: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
 				Operators: operators{
-					Total:   1,
-					Waiting: []operator{{Name: "test-operator", Condition: updatingFalsePending}},
+					Total: 1,
+					Updated: []operator{
+						{Name: "test-operator-1", Condition: updatingFalseUpdated},
+					},
+					Waiting: []operator{
+						{Name: "test-operator", Condition: updatingFalsePending},
+					},
 				},
 				TargetVersion: versions{
 					previous: "4.10.0",
@@ -226,27 +223,7 @@ Completion:      66%
 			expected: `= Control Plane =
 Assessment:      Progressing
 Target Version:  4.11.0 (from 4.10.0)
-Completion:      50%
-`,
-		},
-		{
-			name: "Progressing update with updated operator",
-			data: controlPlaneStatusDisplayData{
-				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
-				Operators: operators{
-					Total:   1,
-					Updated: []operator{{Name: "test-operator", Condition: updatingFalseUpdated}},
-				},
-				TargetVersion: versions{
-					previous: "4.10.0",
-					target:   "4.11.0",
-				},
-				Completion: 75,
-			},
-			expected: `= Control Plane =
-Assessment:      Progressing
-Target Version:  4.11.0 (from 4.10.0)
-Completion:      75%
+Completion:      50% (1 operators updated, 0 updating, 1 waiting)
 `,
 		},
 		{
@@ -259,11 +236,20 @@ Completion:      75%
 					isPreviousPartial: true,
 				},
 				Completion: 50,
+				Operators: operators{
+					Total: 2,
+					Updated: []operator{
+						{Name: "test-operator-1", Condition: updatingFalseUpdated},
+					},
+					Waiting: []operator{
+						{Name: "test-operator-2", Condition: updatingFalsePending},
+					},
+				},
 			},
 			expected: `= Control Plane =
 Assessment:      Progressing
 Target Version:  4.11.0 (from incomplete 4.10.0)
-Completion:      50%
+Completion:      50% (1 operators updated, 0 updating, 1 waiting)
 `,
 		},
 		{
@@ -275,11 +261,17 @@ Completion:      50%
 					target:   "4.11.0",
 				},
 				Completion: 100,
+				Operators: operators{
+					Total: 1,
+					Updated: []operator{
+						{Name: "test-operator", Condition: updatingFalseUpdated},
+					},
+				},
 			},
 			expected: `= Control Plane =
 Assessment:      Completed
 Target Version:  4.11.0 (from 4.10.0)
-Completion:      100%
+Completion:      100% (1 operators updated, 0 updating, 0 waiting)
 `,
 		},
 	}
