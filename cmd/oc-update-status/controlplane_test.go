@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -97,7 +98,7 @@ func TestVagueUnder(t *testing.T) {
 			actual:    3 * time.Hour,
 			estimated: 2 * time.Hour,
 			multi:     true,
-			expected:  "N/A for Multi-Architecture Migration",
+			expected:  "N/A; multi-architecture migration",
 		},
 		{
 			name:      "over 10m over estimate",
@@ -547,6 +548,88 @@ func TestControlPlaneStatusDisplayDataWrite_Duration(t *testing.T) {
 			}
 
 			if diff := cmp.Diff(expectedLine, durationLine); diff != "" {
+				t.Errorf("controlPlaneStatusDisplayData.Write() mismatch (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestControlPlaneStatusDisplayDataWrite_DurationEstimate(t *testing.T) {
+	t.Parallel()
+
+	templateData := controlPlaneStatusDisplayData{
+		Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+		Completion: 33,
+		Duration:   42 * time.Minute,
+		Operators: operators{
+			Total:   3,
+			Updated: []operator{{Name: "test-operator-1", Condition: updatingFalseUpdated}},
+			Waiting: []operator{{Name: "test-operator-2", Condition: updatingFalsePending}},
+		},
+		TargetVersion: versions{
+			previous: "4.10.0",
+			target:   "4.11.0",
+		},
+	}
+
+	testCases := []struct {
+		name          string
+		estToComplete time.Duration
+		estDuration   time.Duration
+		expected      string
+	}{
+		{
+			name:          "normal estimate",
+			estToComplete: 18 * time.Minute,
+			estDuration:   60 * time.Minute,
+			expected:      "Duration:        <DURATION> (Est. Time Remaining: 18m)",
+		},
+		{
+			name:          "close to estimate",
+			estToComplete: 2 * time.Minute,
+			estDuration:   44 * time.Minute,
+			expected:      "Duration:        <DURATION> (Est. Time Remaining: <10m)",
+		},
+		{
+			name:          "slightly over estimate",
+			estToComplete: -2 * time.Minute,
+			estDuration:   40 * time.Minute,
+			expected:      "Duration:        <DURATION> (Est. Time Remaining: <10m)",
+		},
+		{
+			name:          "over estimate",
+			estToComplete: -12 * time.Minute,
+			estDuration:   30 * time.Minute,
+			expected:      "Duration:        <DURATION> (Est. Time Remaining: N/A; estimate duration was 30m)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			data := templateData
+			data.EstTimeToComplete = tc.estToComplete
+			data.EstDuration = tc.estDuration
+
+			var buf bytes.Buffer
+			if err := data.Write(&buf, false, time.Now()); err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			var durationLine string
+			for _, line := range bytes.Split(buf.Bytes(), []byte("\n")) {
+				if bytes.HasPrefix(line, []byte("Duration:")) {
+					durationLine = strings.Replace(string(line), "42m", "<DURATION>", 1)
+					break
+				}
+			}
+
+			if durationLine == "" {
+				t.Fatalf("Expected duration line not found in output: %s", buf.String())
+			}
+
+			if diff := cmp.Diff(tc.expected, durationLine); diff != "" {
 				t.Errorf("controlPlaneStatusDisplayData.Write() mismatch (-expected +got):\n%s", diff)
 			}
 		})

@@ -70,11 +70,12 @@ type controlPlaneStatusDisplayData struct {
 	Assessment assessmentState
 	Completion float64
 	// CompletionAt         time.Time
-	Duration time.Duration
-	// EstDuration          time.Duration
-	// EstTimeToComplete    time.Duration
-	Operators     operators
-	TargetVersion versions
+	Duration             time.Duration
+	EstDuration          time.Duration
+	EstTimeToComplete    time.Duration
+	IsMultiArchMigration bool
+	Operators            operators
+	TargetVersion        versions
 }
 
 //nolint:lll
@@ -85,12 +86,11 @@ Target Version:  {{ .TargetVersion }}
 Updating:        {{ . }}
 {{ end -}}
 Completion:      {{ printf "%.0f" .Completion }}% ({{ len .Operators.Updated }} operators updated, {{ len .Operators.Updating }} updating, {{ len .Operators.Waiting }} waiting)
-Duration:        {{ shortDuration .Duration }}
+Duration:        {{ shortDuration .Duration }}{{ if .EstTimeToComplete }} (Est. Time Remaining: {{ vagueUnder .EstTimeToComplete .EstDuration .IsMultiArchMigration }}){{ end }}
 `
 
 //nolint:lll
 // TODO(muller): Complete the template as I add more functionality.
-// Duration:        {{ shortDuration .Duration }}{{ if .EstTimeToComplete }} (Est. Time Remaining: {{ vagueUnder .EstTimeToComplete .EstDuration .IsMultiArchMigration }}){{ end }}
 // Operator Health: {{ .Operators.StatusSummary }}
 
 func shortDuration(d time.Duration) string {
@@ -117,7 +117,7 @@ func shortDuration(d time.Duration) string {
 
 func vagueUnder(actual, estimated time.Duration, isMultiArchMigration bool) string {
 	if isMultiArchMigration {
-		return "N/A for Multi-Architecture Migration"
+		return "N/A; multi-architecture migration"
 	}
 	threshold := 10 * time.Minute
 	switch {
@@ -310,12 +310,17 @@ func assessControlPlaneStatus(
 	}
 	// precision to seconds when under 60s
 	if updatingFor > 10*time.Minute {
-		displayData.Duration = updatingFor.Round(time.Minute)
+		updatingFor = updatingFor.Round(time.Minute)
 	} else {
-		displayData.Duration = updatingFor.Round(time.Second)
+		updatingFor = updatingFor.Round(time.Second)
 	}
 
 	displayData.Duration = updatingFor
+
+	if cv.EstimatedCompletedAt != nil {
+		displayData.EstDuration = cv.EstimatedCompletedAt.Sub(cv.StartedAt.Time)
+		displayData.EstTimeToComplete = cv.EstimatedCompletedAt.Time.Sub(now)
+	}
 
 	for _, co := range cos {
 		updating := meta.FindStatusCondition(co.Conditions, string(v1alpha1.ClusterOperatorProgressInsightUpdating))
