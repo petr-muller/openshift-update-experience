@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"regexp"
 	"testing"
 	"time"
 
@@ -127,53 +128,439 @@ func TestVagueUnder(t *testing.T) {
 	}
 }
 
-func TestControlPlaneStatusDisplayDataWrite(t *testing.T) {
-	t.Parallel()
-
-	updatingTrue := metav1.Condition{
+var (
+	updatingTrue = metav1.Condition{
 		Type:    string(v1alpha1.ClusterOperatorProgressInsightUpdating),
 		Status:  metav1.ConditionTrue,
 		Reason:  "OperatorGoesBrrr",
 		Message: "Operator goes brrr",
 	}
 
-	updatingFalsePending := metav1.Condition{
+	updatingFalsePending = metav1.Condition{
 		Type:    string(v1alpha1.ClusterOperatorProgressInsightUpdating),
 		Status:  metav1.ConditionFalse,
 		Reason:  "Pending",
 		Message: "Operator will go brrr soon",
 	}
 
-	updatingFalseUpdated := metav1.Condition{
+	updatingFalseUpdated = metav1.Condition{
 		Type:    string(v1alpha1.ClusterOperatorProgressInsightUpdating),
 		Status:  metav1.ConditionFalse,
 		Reason:  "Updated",
 		Message: "Operator went brrr",
 	}
+)
+
+func TestControlPlaneStatusDisplayDataWrite_Assessment(t *testing.T) {
+	t.Parallel()
+
+	templateData := controlPlaneStatusDisplayData{
+		Completion: 33,
+		Duration:   36 * time.Second,
+		Operators: operators{
+			Total:    3,
+			Updated:  []operator{{Name: "test-operator-1", Condition: updatingFalseUpdated}},
+			Waiting:  []operator{{Name: "test-operator-2", Condition: updatingFalsePending}},
+			Updating: []operator{{Name: "test-operator-3", Condition: updatingTrue}},
+		},
+		TargetVersion: versions{
+			previous: "4.10.0",
+			target:   "4.11.0",
+		},
+	}
+
+	for assessment, expectedLine := range map[v1alpha1.ClusterVersionAssessment]string{
+		v1alpha1.ClusterVersionAssessmentUnknown:     "Assessment:      Unknown",
+		v1alpha1.ClusterVersionAssessmentProgressing: "Assessment:      Progressing",
+		v1alpha1.ClusterVersionAssessmentCompleted:   "Assessment:      Completed",
+		v1alpha1.ClusterVersionAssessmentDegraded:    "Assessment:      Degraded",
+	} {
+		t.Run(string(assessment), func(t *testing.T) {
+			t.Parallel()
+
+			data := templateData
+			data.Assessment = assessmentState(assessment)
+			var buf bytes.Buffer
+			if err := data.Write(&buf, false, time.Now()); err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			var assessmentLine string
+			for _, line := range bytes.Split(buf.Bytes(), []byte("\n")) {
+				if bytes.HasPrefix(line, []byte("Assessment:")) {
+					assessmentLine = string(line)
+					break
+				}
+			}
+
+			if assessmentLine == "" {
+				t.Fatalf("Expected assessment line not found in output: %s", buf.String())
+			}
+
+			if diff := cmp.Diff(expectedLine, assessmentLine); diff != "" {
+				t.Errorf("controlPlaneStatusDisplayData.Write() mismatch (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestControlPlaneStatusDisplayDataWrite_TargetVersion(t *testing.T) {
+	t.Parallel()
+
+	templateData := controlPlaneStatusDisplayData{
+		Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+		Completion: 33,
+		Duration:   36 * time.Second,
+		Operators: operators{
+			Total:    3,
+			Updated:  []operator{{Name: "test-operator-1", Condition: updatingFalseUpdated}},
+			Waiting:  []operator{{Name: "test-operator-2", Condition: updatingFalsePending}},
+			Updating: []operator{{Name: "test-operator-3", Condition: updatingTrue}},
+		},
+	}
+
+	testCases := []struct {
+		name     string
+		versions versions
+		expected string
+	}{
+		{
+			name: "installation",
+			versions: versions{
+				target:          "4.11.0",
+				isTargetInstall: true,
+			},
+			expected: "Target Version:  4.11.0 (installation)",
+		},
+		{
+			name: "update",
+			versions: versions{
+				previous: "4.10.0",
+				target:   "4.11.0",
+			},
+			expected: "Target Version:  4.11.0 (from 4.10.0)",
+		},
+		{
+			name: "update from partial",
+			versions: versions{
+				previous:          "4.10.0",
+				target:            "4.11.0",
+				isPreviousPartial: true,
+			},
+			expected: "Target Version:  4.11.0 (from incomplete 4.10.0)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			data := templateData
+			data.TargetVersion = tc.versions
+
+			var buf bytes.Buffer
+			if err := data.Write(&buf, false, time.Now()); err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			var targetVersionLine string
+			for _, line := range bytes.Split(buf.Bytes(), []byte("\n")) {
+				if bytes.HasPrefix(line, []byte("Target Version: ")) {
+					targetVersionLine = string(line)
+					break
+				}
+			}
+
+			if targetVersionLine == "" {
+				t.Fatalf("Expected target version line not found in output: %s", buf.String())
+			}
+
+			if diff := cmp.Diff(tc.expected, targetVersionLine); diff != "" {
+				t.Errorf("controlPlaneStatusDisplayData.Write() mismatch (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestControlPlaneStatusDisplayDataWrite_UpdatingOperators(t *testing.T) {
+	t.Parallel()
+
+	templateData := controlPlaneStatusDisplayData{
+		Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+		Completion: 33,
+		Duration:   36 * time.Second,
+		Operators: operators{
+			Total:   3,
+			Updated: []operator{{Name: "test-operator-1", Condition: updatingFalseUpdated}},
+			Waiting: []operator{{Name: "test-operator-2", Condition: updatingFalsePending}},
+		},
+		TargetVersion: versions{
+			previous: "4.10.0",
+			target:   "4.11.0",
+		},
+	}
+
+	testCases := []struct {
+		name              string
+		updatingOperators []operator
+		expected          string
+	}{
+		{
+			name:              "no updating operators",
+			updatingOperators: nil,
+			expected:          "",
+		},
+		{
+			name: "single updating operator",
+			updatingOperators: []operator{
+				{Name: "test-operator-1", Condition: updatingTrue},
+			},
+			expected: "Updating:        test-operator-1",
+		},
+		{
+			name: "multiple updating operators",
+			updatingOperators: []operator{
+				{Name: "test-operator-1", Condition: updatingTrue},
+				{Name: "test-operator-2", Condition: updatingTrue},
+				{Name: "test-operator-3", Condition: updatingTrue},
+			},
+			expected: "Updating:        test-operator-1, test-operator-2, test-operator-3",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			data := templateData
+			data.Operators.Updating = tc.updatingOperators
+
+			var buf bytes.Buffer
+			if err := data.Write(&buf, false, time.Now()); err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			var updatingLine string
+			for _, line := range bytes.Split(buf.Bytes(), []byte("\n")) {
+				if bytes.HasPrefix(line, []byte("Updating:")) {
+					updatingLine = string(line)
+					break
+				}
+			}
+
+			if diff := cmp.Diff(tc.expected, updatingLine); diff != "" {
+				t.Errorf("controlPlaneStatusDisplayData.Write() mismatch (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestControlPlaneStatusDisplayDataWrite_Completion(t *testing.T) {
+	t.Parallel()
+
+	templateData := controlPlaneStatusDisplayData{
+		Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+		Duration:   36 * time.Second,
+		Operators: operators{
+			Total:   3,
+			Updated: []operator{{Name: "test-operator-1", Condition: updatingFalseUpdated}},
+			Waiting: []operator{{Name: "test-operator-2", Condition: updatingFalsePending}},
+		},
+		TargetVersion: versions{
+			previous: "4.10.0",
+			target:   "4.11.0",
+		},
+	}
+
+	placeholder := regexp.MustCompile(`\(.*\)`)
+
+	for completion, expectedLine := range map[float64]string{
+		0:   "Completion:      0% <OPERATORS>",
+		25:  "Completion:      25% <OPERATORS>",
+		50:  "Completion:      50% <OPERATORS>",
+		75:  "Completion:      75% <OPERATORS>",
+		100: "Completion:      100% <OPERATORS>",
+	} {
+		t.Run(expectedLine, func(t *testing.T) {
+			t.Parallel()
+
+			data := templateData
+			data.Completion = completion
+
+			var buf bytes.Buffer
+			if err := data.Write(&buf, false, time.Now()); err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			var completionLine string
+			for _, line := range bytes.Split(buf.Bytes(), []byte("\n")) {
+				if bytes.HasPrefix(line, []byte("Completion:")) {
+					completionLine = placeholder.ReplaceAllString(string(line), "<OPERATORS>")
+					break
+				}
+			}
+
+			if completionLine == "" {
+				t.Fatalf("Expected completion line not found in output: %s", buf.String())
+			}
+
+			if diff := cmp.Diff(expectedLine, completionLine); diff != "" {
+				t.Errorf("controlPlaneStatusDisplayData.Write() mismatch (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestControlPlaneStatusDisplayDataWrite_CompletionOperators(t *testing.T) {
+	t.Parallel()
+
+	templateData := controlPlaneStatusDisplayData{
+		Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+		Duration:   36 * time.Second,
+		Completion: 50,
+		TargetVersion: versions{
+			previous: "4.10.0",
+			target:   "4.11.0",
+		},
+	}
+
+	testCases := []struct {
+		name      string
+		operators operators
+		expected  string
+	}{
+		{
+			name: "all pending",
+			operators: operators{
+				Total:   3,
+				Updated: []operator{},
+				Waiting: []operator{
+					{Name: "test-operator-1", Condition: updatingFalsePending},
+					{Name: "test-operator-2", Condition: updatingFalsePending},
+					{Name: "test-operator-3", Condition: updatingFalsePending},
+				},
+			},
+			expected: "Completion:      <PERCENTAGE> (0 operators updated, 0 updating, 3 waiting)",
+		},
+		{
+			name: "all updated",
+			operators: operators{
+				Total: 3,
+				Updated: []operator{
+					{Name: "test-operator-1", Condition: updatingFalseUpdated},
+					{Name: "test-operator-2", Condition: updatingFalseUpdated},
+					{Name: "test-operator-3", Condition: updatingFalseUpdated},
+				},
+			},
+			expected: "Completion:      <PERCENTAGE> (3 operators updated, 0 updating, 0 waiting)",
+		},
+		{
+			name: "one of each",
+			operators: operators{
+				Total:    3,
+				Updated:  []operator{{Name: "test-operator-1", Condition: updatingFalseUpdated}},
+				Waiting:  []operator{{Name: "test-operator-2", Condition: updatingFalsePending}},
+				Updating: []operator{{Name: "test-operator-3", Condition: updatingTrue}},
+			},
+			expected: "Completion:      <PERCENTAGE> (1 operators updated, 1 updating, 1 waiting)",
+		},
+	}
+
+	placeholder := regexp.MustCompile(`\d+%`)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			data := templateData
+			data.Operators = tc.operators
+
+			var buf bytes.Buffer
+			if err := data.Write(&buf, false, time.Now()); err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			var completionLine string
+			for _, line := range bytes.Split(buf.Bytes(), []byte("\n")) {
+				if bytes.HasPrefix(line, []byte("Completion:")) {
+					completionLine = placeholder.ReplaceAllString(string(line), "<PERCENTAGE>")
+					break
+				}
+			}
+
+			if completionLine == "" {
+				t.Fatalf("Expected completion line not found in output: %s", buf.String())
+			}
+
+			if diff := cmp.Diff(tc.expected, completionLine); diff != "" {
+				t.Errorf("controlPlaneStatusDisplayData.Write() mismatch (-expected +got):\n%s", diff)
+			}
+
+		})
+	}
+}
+
+func TestControlPlaneStatusDisplayDataWrite_Duration(t *testing.T) {
+	t.Parallel()
+
+	templateData := controlPlaneStatusDisplayData{
+		Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+		Completion: 33,
+		Operators: operators{
+			Total:   3,
+			Updated: []operator{{Name: "test-operator-1", Condition: updatingFalseUpdated}},
+			Waiting: []operator{{Name: "test-operator-2", Condition: updatingFalsePending}},
+		},
+		TargetVersion: versions{
+			previous: "4.10.0",
+			target:   "4.11.0",
+		},
+	}
+
+	for duration, expectedLine := range map[time.Duration]string{
+		time.Second:                           "Duration:        1s",
+		time.Minute:                           "Duration:        1m",
+		time.Hour:                             "Duration:        1h",
+		time.Hour + time.Minute + time.Second: "Duration:        1h1m1s",
+		10*time.Hour + 10*time.Minute:         "Duration:        10h10m",
+	} {
+		t.Run(expectedLine, func(t *testing.T) {
+			t.Parallel()
+
+			data := templateData
+			data.Duration = duration
+
+			var buf bytes.Buffer
+			if err := data.Write(&buf, false, time.Now()); err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			var durationLine string
+			for _, line := range bytes.Split(buf.Bytes(), []byte("\n")) {
+				if bytes.HasPrefix(line, []byte("Duration:")) {
+					durationLine = string(line)
+					break
+				}
+			}
+
+			if durationLine == "" {
+				t.Fatalf("Expected duration line not found in output: %s", buf.String())
+			}
+
+			if diff := cmp.Diff(expectedLine, durationLine); diff != "" {
+				t.Errorf("controlPlaneStatusDisplayData.Write() mismatch (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestControlPlaneStatusDisplayDataWrite(t *testing.T) {
+	t.Parallel()
 
 	testCases := []struct {
 		name     string
 		data     controlPlaneStatusDisplayData
 		expected string
 	}{
-		{
-			name: "Progressing installation",
-			data: controlPlaneStatusDisplayData{
-				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
-				Completion: 3,
-				Duration:   10 * time.Minute,
-				TargetVersion: versions{
-					target:          "4.11.0",
-					isTargetInstall: true,
-				},
-			},
-			expected: `= Control Plane =
-Assessment:      Progressing
-Target Version:  4.11.0 (installation)
-Completion:      3% (0 operators updated, 0 updating, 0 waiting)
-Duration:        10m
-`,
-		},
 		{
 			name: "Progressing update",
 			data: controlPlaneStatusDisplayData{
@@ -203,61 +590,6 @@ Target Version:  4.11.0 (from 4.10.0)
 Updating:        test-operator-3
 Completion:      33% (1 operators updated, 1 updating, 1 waiting)
 Duration:        36s
-`,
-		},
-		{
-			name: "Progressing update with pending operator",
-			data: controlPlaneStatusDisplayData{
-				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
-				Completion: 50,
-				Duration:   80 * time.Minute,
-				Operators: operators{
-					Total: 1,
-					Updated: []operator{
-						{Name: "test-operator-1", Condition: updatingFalseUpdated},
-					},
-					Waiting: []operator{
-						{Name: "test-operator", Condition: updatingFalsePending},
-					},
-				},
-				TargetVersion: versions{
-					previous: "4.10.0",
-					target:   "4.11.0",
-				},
-			},
-			expected: `= Control Plane =
-Assessment:      Progressing
-Target Version:  4.11.0 (from 4.10.0)
-Completion:      50% (1 operators updated, 0 updating, 1 waiting)
-Duration:        1h20m
-`,
-		},
-		{
-			name: "Progressing update from partial",
-			data: controlPlaneStatusDisplayData{
-				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
-				Completion: 50,
-				Duration:   20 * time.Minute,
-				TargetVersion: versions{
-					previous:          "4.10.0",
-					target:            "4.11.0",
-					isPreviousPartial: true,
-				},
-				Operators: operators{
-					Total: 2,
-					Updated: []operator{
-						{Name: "test-operator-1", Condition: updatingFalseUpdated},
-					},
-					Waiting: []operator{
-						{Name: "test-operator-2", Condition: updatingFalsePending},
-					},
-				},
-			},
-			expected: `= Control Plane =
-Assessment:      Progressing
-Target Version:  4.11.0 (from incomplete 4.10.0)
-Completion:      50% (1 operators updated, 0 updating, 1 waiting)
-Duration:        20m
 `,
 		},
 		{
@@ -306,25 +638,6 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 	var minutesAgo [60]metav1.Time
 	for i := range minutesAgo {
 		minutesAgo[i] = metav1.NewTime(now.Add(-time.Duration(i) * time.Minute))
-	}
-
-	updatingTrue := metav1.Condition{
-		Type:    string(v1alpha1.ClusterOperatorProgressInsightUpdating),
-		Status:  metav1.ConditionTrue,
-		Reason:  "OperatorGoesBrrr",
-		Message: "Operator goes brrr",
-	}
-	updatingFalsePending := metav1.Condition{
-		Type:    string(v1alpha1.ClusterOperatorProgressInsightUpdating),
-		Status:  metav1.ConditionFalse,
-		Reason:  "Pending",
-		Message: "Operator will go brrr soon",
-	}
-	updatingFalseUpdated := metav1.Condition{
-		Type:    string(v1alpha1.ClusterOperatorProgressInsightUpdating),
-		Status:  metav1.ConditionFalse,
-		Reason:  "Updated",
-		Message: "Operator went brrr",
 	}
 
 	testCases := []struct {
