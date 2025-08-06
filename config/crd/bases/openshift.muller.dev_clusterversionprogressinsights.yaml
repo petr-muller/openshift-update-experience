@@ -147,6 +147,12 @@ spec:
                   expected to complete.
                 format: date-time
                 type: string
+              lastObservedProgress:
+                description: |-
+                  lastObservedProgress is the time when last update progress (completionPercent either raised or set to 0 when an
+                  update starts) was observed.
+                format: date-time
+                type: string
               name:
                 description: name is equal to the name of the corresponding clusterversions.config.openshift.io
                   resource, typically 'version'
@@ -289,6 +295,7 @@ spec:
             required:
             - assessment
             - completionPercent
+            - lastObservedProgress
             - name
             - startedAt
             - versions

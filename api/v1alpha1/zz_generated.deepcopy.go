@@ -206,6 +206,7 @@ func (in *ClusterVersionProgressInsightStatus) DeepCopyInto(out *ClusterVersionP
 		}
 	}
 	in.Versions.DeepCopyInto(&out.Versions)
+	in.LastObservedProgress.DeepCopyInto(&out.LastObservedProgress)
 	in.StartedAt.DeepCopyInto(&out.StartedAt)
 	if in.CompletedAt != nil {
 		in, out := &in.CompletedAt, &out.CompletedAt
