@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/petr-muller/openshift-update-experience/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 func TestShortDuration(t *testing.T) {
@@ -714,8 +716,283 @@ Duration:        56m
 
 }
 
-func Test_assessControlPlaneStatus(t *testing.T) {
+var (
+	cvInsight = v1alpha1.ClusterVersionProgressInsightStatus{
+		Name:       "version",
+		Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
+		Versions: v1alpha1.ControlPlaneUpdateVersions{
+			Previous: &v1alpha1.Version{
+				Version: "4.10.0",
+			},
+			Target: v1alpha1.Version{
+				Version: "4.11.0",
+			},
+		},
+		Completion:           50,
+		StartedAt:            metav1.NewTime(time.Now().Add(-30 * time.Minute)),
+		CompletedAt:          nil,
+		EstimatedCompletedAt: nil,
+		Conditions:           nil,
+	}
+)
 
+func Test_assessControlPlaneStatus_Assessment(t *testing.T) {
+	t.Parallel()
+
+	for _, assessment := range []v1alpha1.ClusterVersionAssessment{
+		v1alpha1.ClusterVersionAssessmentUnknown,
+		v1alpha1.ClusterVersionAssessmentProgressing,
+		v1alpha1.ClusterVersionAssessmentCompleted,
+		v1alpha1.ClusterVersionAssessmentDegraded,
+	} {
+		t.Run(string(assessment), func(t *testing.T) {
+			t.Parallel()
+
+			insight := cvInsight.DeepCopy()
+			insight.Assessment = assessment
+
+			controlPlaneStatus := assessControlPlaneStatus(insight, nil, time.Now())
+			if controlPlaneStatus.Assessment != assessmentState(assessment) {
+				t.Errorf("Expected assessment %s, got %s", assessment, controlPlaneStatus.Assessment)
+			}
+		})
+	}
+
+}
+
+func Test_assessControlPlaneStatus_Completion(t *testing.T) {
+	t.Parallel()
+
+	for _, completion := range []int32{0, 25, 50, 75, 100} {
+		t.Run(string(completion), func(t *testing.T) {
+			t.Parallel()
+
+			insight := cvInsight.DeepCopy()
+			insight.Completion = completion
+
+			controlPlaneStatus := assessControlPlaneStatus(insight, nil, time.Now())
+			if controlPlaneStatus.Completion != float64(completion) {
+				t.Errorf("Expected completion %f, got %f", float64(completion), controlPlaneStatus.Completion)
+			}
+		})
+	}
+
+}
+
+func Test_assessControlPlaneStatus_Duration(t *testing.T) {
+	t.Parallel()
+
+	now := metav1.Now()
+	for started, expected := range map[metav1.Time]time.Duration{
+		now: 0 * time.Second,
+		metav1.NewTime(now.Add(-30 * time.Minute)):                    30 * time.Minute,
+		metav1.NewTime(now.Add(-5*time.Minute - 10*time.Millisecond)): 5 * time.Minute, // Rounded to seconds when under 10m
+		metav1.NewTime(now.Add(-55*time.Second - 9*time.Minute)):      55*time.Second + 9*time.Minute,
+		metav1.NewTime(now.Add(-55*time.Second - 10*time.Minute)):     11 * time.Minute, // Rounded to minutes when over 10m
+	} {
+		t.Run(expected.String(), func(t *testing.T) {
+			t.Parallel()
+
+			insight := cvInsight.DeepCopy()
+			insight.StartedAt = started
+
+			controlPlaneStatus := assessControlPlaneStatus(insight, nil, now.Time)
+			if controlPlaneStatus.Duration != expected {
+				t.Errorf(
+					"Expected duration %s (between started %s and now %s), got %s",
+					expected,
+					started.Format(time.TimeOnly),
+					now.Format(time.TimeOnly),
+					controlPlaneStatus.Duration,
+				)
+			}
+		})
+
+		t.Run(fmt.Sprintf("CompletedAt: started+%s", expected.String()), func(t *testing.T) {
+			t.Parallel()
+
+			insight := cvInsight.DeepCopy()
+			adjustedStarted := started.Add(-30 * time.Minute)
+			insight.StartedAt = metav1.NewTime(adjustedStarted)
+			insight.CompletedAt = ptr.To(metav1.NewTime(adjustedStarted.Add(expected)))
+
+			controlPlaneStatus := assessControlPlaneStatus(insight, nil, now.Time)
+			if controlPlaneStatus.Duration != expected {
+				t.Errorf(
+					"Expected duration %s (between started %s and completed %s with now %s), got %s",
+					expected,
+					adjustedStarted.Format(time.TimeOnly),
+					insight.CompletedAt.Format(time.TimeOnly),
+					now.Format(time.TimeOnly),
+					controlPlaneStatus.Duration,
+				)
+			}
+		})
+	}
+}
+
+func Test_assessControlPlaneStatus_Estimates(t *testing.T) {
+	t.Parallel()
+
+	now := metav1.Now()
+	for started, estimated := range map[metav1.Time]time.Duration{
+		now: 41 * time.Minute, // Estimated in +41m
+		metav1.NewTime(now.Add(-30 * time.Minute)): 42 * time.Minute, // Estimated in +12m
+		metav1.NewTime(now.Add(-90 * time.Minute)): 43 * time.Minute, // Estimated in -47m
+	} {
+		t.Run(estimated.String(), func(t *testing.T) {
+			t.Parallel()
+
+			insight := cvInsight.DeepCopy()
+			insight.StartedAt = started
+			insight.EstimatedCompletedAt = ptr.To(metav1.NewTime(started.Add(estimated)))
+
+			controlPlaneStatus := assessControlPlaneStatus(insight, nil, now.Time)
+			if controlPlaneStatus.EstDuration != estimated {
+				t.Errorf("Expected estimated duration %s, got %s", estimated, controlPlaneStatus.EstDuration)
+			}
+
+			expected := started.Add(estimated).Sub(now.Time)
+			if controlPlaneStatus.EstTimeToComplete != expected {
+				t.Errorf("Expected estimated time to complete %s, got %s", expected, controlPlaneStatus.EstTimeToComplete)
+			}
+		})
+	}
+}
+
+func Test_assessControlPlaneStatus_TargetVersion(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		versions v1alpha1.ControlPlaneUpdateVersions
+		expected versions
+	}{
+		{
+			name: "installation",
+			versions: v1alpha1.ControlPlaneUpdateVersions{
+				Target: v1alpha1.Version{
+					Version:  "4.11.0",
+					Metadata: []v1alpha1.VersionMetadata{{Key: v1alpha1.InstallationMetadata}},
+				},
+			},
+			expected: versions{
+				target:          "4.11.0",
+				isTargetInstall: true,
+			},
+		},
+		{
+			name: "update",
+			versions: v1alpha1.ControlPlaneUpdateVersions{
+				Previous: &v1alpha1.Version{Version: "4.10.0"},
+				Target:   v1alpha1.Version{Version: "4.11.0"},
+			},
+			expected: versions{
+				previous: "4.10.0",
+				target:   "4.11.0",
+			},
+		},
+		{
+			name: "update from partial",
+			versions: v1alpha1.ControlPlaneUpdateVersions{
+				Previous: &v1alpha1.Version{
+					Version:  "4.10.0",
+					Metadata: []v1alpha1.VersionMetadata{{Key: v1alpha1.PartialMetadata}},
+				},
+				Target: v1alpha1.Version{Version: "4.11.0"},
+			},
+			expected: versions{
+				previous:          "4.10.0",
+				target:            "4.11.0",
+				isPreviousPartial: true,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			insight := cvInsight.DeepCopy()
+			insight.Versions = tc.versions
+
+			controlPlaneStatus := assessControlPlaneStatus(insight, nil, time.Now())
+			if diff := cmp.Diff(tc.expected, controlPlaneStatus.TargetVersion, cmp.AllowUnexported(versions{})); diff != "" {
+				t.Errorf("TargetVersion mismatch (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func Test_assessControlPlaneStatus_Operators(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name       string
+		coInsights []v1alpha1.ClusterOperatorProgressInsightStatus
+		expected   operators
+	}{
+		{
+			name: "all operators pending",
+			coInsights: []v1alpha1.ClusterOperatorProgressInsightStatus{
+				{Name: "test-operator-1", Conditions: []metav1.Condition{updatingFalsePending}},
+				{Name: "test-operator-2", Conditions: []metav1.Condition{updatingFalsePending}},
+				{Name: "test-operator-3", Conditions: []metav1.Condition{updatingFalsePending}},
+			},
+			expected: operators{
+				Total: 3,
+				Waiting: []operator{
+					{Name: "test-operator-1", Condition: updatingFalsePending},
+					{Name: "test-operator-2", Condition: updatingFalsePending},
+					{Name: "test-operator-3", Condition: updatingFalsePending},
+				},
+			},
+		},
+		{
+			name: "all operators updated",
+			coInsights: []v1alpha1.ClusterOperatorProgressInsightStatus{
+				{Name: "test-operator-1", Conditions: []metav1.Condition{updatingFalseUpdated}},
+				{Name: "test-operator-2", Conditions: []metav1.Condition{updatingFalseUpdated}},
+			},
+			expected: operators{
+				Total: 2,
+				Updated: []operator{
+					{Name: "test-operator-1", Condition: updatingFalseUpdated},
+					{Name: "test-operator-2", Condition: updatingFalseUpdated},
+				},
+			},
+		},
+		{
+			name: "one of each",
+			coInsights: []v1alpha1.ClusterOperatorProgressInsightStatus{
+				{Name: "test-operator-1", Conditions: []metav1.Condition{updatingFalseUpdated}},
+				{Name: "test-operator-2", Conditions: []metav1.Condition{updatingFalsePending}},
+				{Name: "test-operator-3", Conditions: []metav1.Condition{updatingTrue}},
+			},
+			expected: operators{
+				Total:    3,
+				Updated:  []operator{{Name: "test-operator-1", Condition: updatingFalseUpdated}},
+				Waiting:  []operator{{Name: "test-operator-2", Condition: updatingFalsePending}},
+				Updating: []operator{{Name: "test-operator-3", Condition: updatingTrue}},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			insight := cvInsight.DeepCopy()
+			controlPlaneStatus := assessControlPlaneStatus(insight, tc.coInsights, time.Now())
+
+			if diff := cmp.Diff(tc.expected, controlPlaneStatus.Operators, cmp.AllowUnexported(operators{})); diff != "" {
+				t.Errorf("Operators mismatch (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func Test_assessControlPlaneStatus(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
 	var minutesAgo [60]metav1.Time
@@ -730,87 +1007,7 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 		expected   controlPlaneStatusDisplayData
 	}{
 		{
-			name: "Progressing update with pending ClusterOperator",
-			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
-				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
-				Completion: 3,
-				StartedAt:  minutesAgo[50],
-				Versions: v1alpha1.ControlPlaneUpdateVersions{
-					Previous: &v1alpha1.Version{
-						Version: "4.10.0",
-					},
-					Target: v1alpha1.Version{
-						Version: "4.11.0",
-					},
-				},
-			},
-			coInsights: []v1alpha1.ClusterOperatorProgressInsightStatus{
-				{
-					Name:       "test-operator",
-					Conditions: []metav1.Condition{updatingFalsePending},
-				},
-			},
-			expected: controlPlaneStatusDisplayData{
-				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
-				Completion: 3,
-				Duration:   50 * time.Minute,
-				Operators: operators{
-					Total: 1,
-					Waiting: []operator{
-						{
-							Name:      "test-operator",
-							Condition: updatingFalsePending,
-						},
-					},
-				},
-				TargetVersion: versions{
-					previous: "4.10.0",
-					target:   "4.11.0",
-				},
-			},
-		},
-		{
-			name: "Progressing update with updated ClusterOperator",
-			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
-				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
-				Completion: 66,
-				StartedAt:  minutesAgo[40],
-				Versions: v1alpha1.ControlPlaneUpdateVersions{
-					Previous: &v1alpha1.Version{
-						Version: "4.10.0",
-					},
-					Target: v1alpha1.Version{
-						Version: "4.11.0",
-					},
-				},
-			},
-			coInsights: []v1alpha1.ClusterOperatorProgressInsightStatus{
-				{
-					Name:       "test-operator",
-					Conditions: []metav1.Condition{updatingFalseUpdated},
-				},
-			},
-			expected: controlPlaneStatusDisplayData{
-				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
-				Completion: 66,
-				Duration:   40 * time.Minute,
-				Operators: operators{
-					Total: 1,
-					Updated: []operator{
-						{
-							Name:      "test-operator",
-							Condition: updatingFalseUpdated,
-						},
-					},
-				},
-				TargetVersion: versions{
-					previous: "4.10.0",
-					target:   "4.11.0",
-				},
-			},
-		},
-		{
-			name: "Progressing update with updating ClusterOperator",
+			name: "Progressing update",
 			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
 				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
 				Completion: 50,
@@ -825,85 +1022,31 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 				},
 			},
 			coInsights: []v1alpha1.ClusterOperatorProgressInsightStatus{
-				{
-					Name:       "test-operator",
-					Conditions: []metav1.Condition{updatingTrue},
-				},
+				{Name: "test-operator", Conditions: []metav1.Condition{updatingTrue}},
+				{Name: "test-operator-2", Conditions: []metav1.Condition{updatingFalsePending}},
+				{Name: "test-operator-3", Conditions: []metav1.Condition{updatingFalseUpdated}},
+				{Name: "test-operator-4", Conditions: []metav1.Condition{updatingFalseUpdated}},
 			},
 			expected: controlPlaneStatusDisplayData{
 				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
 				Completion: 50,
 				Duration:   30 * time.Minute,
 				Operators: operators{
-					Total: 1,
+					Total: 4,
 					Updating: []operator{
-						{
-							Name:      "test-operator",
-							Condition: updatingTrue,
-						},
+						{Name: "test-operator", Condition: updatingTrue},
+					},
+					Waiting: []operator{
+						{Name: "test-operator-2", Condition: updatingFalsePending},
+					},
+					Updated: []operator{
+						{Name: "test-operator-3", Condition: updatingFalseUpdated},
+						{Name: "test-operator-4", Condition: updatingFalseUpdated},
 					},
 				},
 				TargetVersion: versions{
 					previous: "4.10.0",
 					target:   "4.11.0",
-				},
-			},
-		},
-		{
-			name: "Progressing update from partial previous",
-			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
-				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
-				Completion: 50,
-				StartedAt:  minutesAgo[20],
-				Versions: v1alpha1.ControlPlaneUpdateVersions{
-					Previous: &v1alpha1.Version{
-						Version: "4.10.0",
-						Metadata: []v1alpha1.VersionMetadata{
-							{
-								Key: v1alpha1.PartialMetadata,
-							},
-						},
-					},
-					Target: v1alpha1.Version{
-						Version: "4.11.0",
-					},
-				},
-			},
-			expected: controlPlaneStatusDisplayData{
-				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
-				Completion: 50,
-				Duration:   20 * time.Minute,
-				TargetVersion: versions{
-					previous:          "4.10.0",
-					target:            "4.11.0",
-					isPreviousPartial: true,
-				},
-			},
-		},
-		{
-			name: "Progressing installation",
-			cvInsight: &v1alpha1.ClusterVersionProgressInsightStatus{
-				Assessment: v1alpha1.ClusterVersionAssessmentProgressing,
-				Completion: 3,
-				StartedAt:  metav1.NewTime(minutesAgo[5].Add(-42 * time.Second)),
-				Versions: v1alpha1.ControlPlaneUpdateVersions{
-					Target: v1alpha1.Version{
-						Version: "4.11.0",
-						Metadata: []v1alpha1.VersionMetadata{
-							{
-								Key: v1alpha1.InstallationMetadata,
-							},
-						},
-					},
-				},
-			},
-			expected: controlPlaneStatusDisplayData{
-				Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
-				Completion: 3,
-				Duration:   5*time.Minute + 42*time.Second,
-				TargetVersion: versions{
-					target:          "4.11.0",
-					isTargetInstall: true,
 				},
 			},
 		},
@@ -916,12 +1059,8 @@ func Test_assessControlPlaneStatus(t *testing.T) {
 				CompletedAt: &minutesAgo[10],
 				Versions: v1alpha1.ControlPlaneUpdateVersions{
 					Target: v1alpha1.Version{
-						Version: "4.11.0",
-						Metadata: []v1alpha1.VersionMetadata{
-							{
-								Key: v1alpha1.InstallationMetadata,
-							},
-						},
+						Version:  "4.11.0",
+						Metadata: []v1alpha1.VersionMetadata{{Key: v1alpha1.InstallationMetadata}},
 					},
 				},
 			},

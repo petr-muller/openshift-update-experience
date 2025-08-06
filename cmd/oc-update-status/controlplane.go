@@ -308,7 +308,8 @@ func assessControlPlaneStatus(
 	} else {
 		updatingFor = cv.CompletedAt.Sub(cv.StartedAt.Time)
 	}
-	// precision to seconds when under 60s
+
+	// precision to seconds when under 10m
 	if updatingFor > 10*time.Minute {
 		updatingFor = updatingFor.Round(time.Minute)
 	} else {
