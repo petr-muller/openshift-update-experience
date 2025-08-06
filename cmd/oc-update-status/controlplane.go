@@ -319,7 +319,7 @@ func assessControlPlaneStatus(
 
 	if cv.EstimatedCompletedAt != nil {
 		displayData.EstDuration = cv.EstimatedCompletedAt.Sub(cv.StartedAt.Time)
-		displayData.EstTimeToComplete = cv.EstimatedCompletedAt.Time.Sub(now)
+		displayData.EstTimeToComplete = cv.EstimatedCompletedAt.Sub(now)
 	}
 
 	for _, co := range cos {
