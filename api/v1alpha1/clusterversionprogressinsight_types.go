@@ -195,6 +195,13 @@ type ClusterVersionProgressInsightStatus struct {
 	// +kubebuilder:validation:Maximum=100
 	Completion int32 `json:"completionPercent"`
 
+	// lastObservedProgress is the time when last update progress (completionPercent either raised or set to 0 when an
+	// update starts) was observed.
+	// +required
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Format=date-time
+	LastObservedProgress metav1.Time `json:"lastObservedProgress"`
+
 	// startedAt is the time when the update started. When there is no update in progress, the Cluster Version
 	// Progress Insight represents the last update (or installation, which is considered to be an update to the initial version)
 	// that is by definition completed, and this field represents the time when that update was initiated.
