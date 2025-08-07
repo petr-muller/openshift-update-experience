@@ -1163,7 +1163,167 @@ func Test_AssessClusterVersion_Completion(t *testing.T) {
 	}
 }
 
-// TODO: func Test_AssessClusterVersion_LastObservedProgress(t *testing.T) {}
+func Test_AssessClusterVersion_LastObservedProgress(t *testing.T) {
+	t.Parallel()
+
+	now := metav1.Now()
+	minutesAgo := func(m int) metav1.Time {
+		return metav1.NewTime(now.Add(-(time.Duration(m)) * time.Minute))
+	}
+
+	condition := func(c openshiftconfigv1.ClusterOperatorStatusCondition, ltt metav1.Time) openshiftconfigv1.ClusterOperatorStatusCondition {
+		n := c.DeepCopy()
+		n.LastTransitionTime = ltt
+		return *n
+	}
+
+	history := func(h openshiftconfigv1.UpdateHistory, started metav1.Time, completion *metav1.Time) openshiftconfigv1.UpdateHistory {
+		n := h.DeepCopy()
+		n.StartedTime = started
+		n.CompletionTime = completion
+		return *n
+	}
+
+	co := func(name string, versions ...string) openshiftconfigv1.ClusterOperator {
+		if len(versions)%2 != 0 {
+			panic("versions must be even, each version must have a name and a version")
+		}
+
+		co := openshiftconfigv1.ClusterOperator{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Status:     openshiftconfigv1.ClusterOperatorStatus{},
+		}
+
+		for i := 0; i < len(versions); i += 2 {
+			co.Status.Versions = append(co.Status.Versions, openshiftconfigv1.OperandVersion{Name: versions[i], Version: versions[i+1]})
+		}
+		return co
+	}
+
+	installed15 := func(cv *openshiftconfigv1.ClusterVersion) {
+		cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
+			condition(cvProgressingFalse15, minutesAgo(40)),
+		}
+		cv.Status.History = []openshiftconfigv1.UpdateHistory{
+			history(cvHistoryCompleted15, minutesAgo(50), ptr.To(minutesAgo(40))),
+		}
+		cv.Status.Desired.Version = cv.Status.History[0].Version
+	}
+
+	updating15to16 := func(cv *openshiftconfigv1.ClusterVersion) {
+		cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
+			condition(cvProgressingTrue16, minutesAgo(30)),
+		}
+		cv.Status.History = []openshiftconfigv1.UpdateHistory{
+			history(cvHistoryPartial16, minutesAgo(30), nil),
+			history(cvHistoryCompleted15, minutesAgo(50), ptr.To(minutesAgo(40))),
+		}
+		cv.Status.Desired.Version = cv.Status.History[0].Version
+	}
+
+	testCases := []struct {
+		name string
+
+		previousCompletion int32
+		mutateBaselineCV   func(*openshiftconfigv1.ClusterVersion)
+		cos                []openshiftconfigv1.ClusterOperator
+
+		expectChange bool
+	}{
+		{
+			name:               "was completed, is completed",
+			previousCompletion: 100,
+			expectChange:       false,
+
+			mutateBaselineCV: installed15,
+			cos: []openshiftconfigv1.ClusterOperator{
+				co("etcd", "operator", cvHistoryCompleted15.Version),
+				co("kube-apiserver", "operator", cvHistoryCompleted15.Version),
+			},
+		},
+		{
+			name:               "was updating, is completed",
+			previousCompletion: 99,
+			expectChange:       true,
+
+			mutateBaselineCV: installed15,
+			cos: []openshiftconfigv1.ClusterOperator{
+				co("etcd", "operator", cvHistoryCompleted15.Version),
+				co("kube-apiserver", "operator", cvHistoryCompleted15.Version),
+			},
+		},
+		{
+			name:               "was completed, started updating",
+			previousCompletion: 100,
+			expectChange:       true,
+
+			mutateBaselineCV: updating15to16,
+			cos: []openshiftconfigv1.ClusterOperator{
+				co("etcd", "operator", cvHistoryCompleted15.Version),
+				co("kube-apiserver", "operator", cvHistoryPartial16.Version),
+			},
+		},
+		{
+			name:               "was updating, progressed",
+			previousCompletion: 33,
+			expectChange:       true,
+
+			mutateBaselineCV: updating15to16,
+			cos: []openshiftconfigv1.ClusterOperator{
+				co("etcd", "operator", cvHistoryCompleted15.Version),
+				co("kube-apiserver", "operator", cvHistoryPartial16.Version),
+				co("openshift-apiserver", "operator", cvHistoryPartial16.Version),
+			},
+		},
+		{
+			name:               "was updating, did not progress",
+			previousCompletion: 33,
+			expectChange:       false,
+
+			mutateBaselineCV: updating15to16,
+			cos: []openshiftconfigv1.ClusterOperator{
+				co("etcd", "operator", cvHistoryCompleted15.Version),
+				co("kube-apiserver", "operator", cvHistoryCompleted15.Version),
+				co("openshift-apiserver", "operator", cvHistoryPartial16.Version),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cv := &openshiftconfigv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Status:     openshiftconfigv1.ClusterVersionStatus{},
+			}
+			tc.mutateBaselineCV(cv)
+			previous := openshiftv1alpha1.ClusterVersionProgressInsightStatus{
+				Completion:           tc.previousCompletion,
+				LastObservedProgress: now,
+			}
+
+			var cos openshiftconfigv1.ClusterOperatorList
+			cos.Items = append(cos.Items, tc.cos...)
+			insight, _ := assessClusterVersion(cv, &previous, &cos)
+			if tc.expectChange {
+				if tc.previousCompletion == insight.Completion {
+					t.Errorf("expected Completion to change, but it did not")
+				}
+				if now == insight.LastObservedProgress {
+					t.Errorf("expected LastObservedProgress to change, but it did not")
+				}
+			} else {
+				if tc.previousCompletion != insight.Completion {
+					t.Errorf("expected Completion to remain the same, but it changed from %d to %d", tc.previousCompletion, insight.Completion)
+				}
+				if now != insight.LastObservedProgress {
+					t.Errorf("expected LastObservedProgress to remain the same, but it changed from %v to %v", now, insight.LastObservedProgress)
+				}
+			}
+		})
+	}
+}
 
 // TODO: func Test_AssessClusterVersion_StartedCompleted(t *testing.T) {}
 
@@ -1322,8 +1482,9 @@ func Test_AssessClusterVersion(t *testing.T) {
 				kubeControllerManager15,
 			},
 			expectedInsight: &openshiftv1alpha1.ClusterVersionProgressInsightStatus{
-				Assessment: openshiftv1alpha1.ClusterVersionAssessmentCompleted,
-				Completion: 100,
+				Assessment:           openshiftv1alpha1.ClusterVersionAssessmentCompleted,
+				Completion:           100,
+				LastObservedProgress: now,
 				Conditions: []metav1.Condition{
 					{
 						Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
@@ -1365,8 +1526,9 @@ func Test_AssessClusterVersion(t *testing.T) {
 				kubeControllerManagerNo,
 			},
 			expectedInsight: &openshiftv1alpha1.ClusterVersionProgressInsightStatus{
-				Assessment: openshiftv1alpha1.ClusterVersionAssessmentProgressing,
-				Completion: 66,
+				Assessment:           openshiftv1alpha1.ClusterVersionAssessmentProgressing,
+				Completion:           66,
+				LastObservedProgress: now,
 				Conditions: []metav1.Condition{
 					{
 						Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
@@ -1408,8 +1570,9 @@ func Test_AssessClusterVersion(t *testing.T) {
 				kubeControllerManager15,
 			},
 			expectedInsight: &openshiftv1alpha1.ClusterVersionProgressInsightStatus{
-				Assessment: openshiftv1alpha1.ClusterVersionAssessmentProgressing,
-				Completion: 33,
+				Assessment:           openshiftv1alpha1.ClusterVersionAssessmentProgressing,
+				Completion:           33,
+				LastObservedProgress: now,
 				Conditions: []metav1.Condition{
 					{
 						Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
@@ -1446,8 +1609,9 @@ func Test_AssessClusterVersion(t *testing.T) {
 				kubeControllerManager15,
 			},
 			expectedInsight: &openshiftv1alpha1.ClusterVersionProgressInsightStatus{
-				Assessment: openshiftv1alpha1.ClusterVersionAssessmentProgressing,
-				Completion: 0,
+				Assessment:           openshiftv1alpha1.ClusterVersionAssessmentProgressing,
+				Completion:           0,
+				LastObservedProgress: now,
 				Conditions: []metav1.Condition{
 					{
 						Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
@@ -1500,7 +1664,7 @@ func Test_AssessClusterVersion(t *testing.T) {
 			cos.Items = append(cos.Items, tc.cos...)
 
 			cvInsight, healthInsights := assessClusterVersion(cv, &tc.previous, &cos)
-			if diff := cmp.Diff(tc.expectedInsight, cvInsight, ignoreInProgressInsight, ignoreLastTransitionTime); diff != "" {
+			if diff := cmp.Diff(tc.expectedInsight, cvInsight, ignoreInProgressInsight, ignoreLastTransitionTime, cmpopts.EquateApproxTime(time.Second)); diff != "" {
 				t.Errorf("expected ClusterVersionProgressInsight mismatch (-want +got):\n%s", diff)
 			}
 

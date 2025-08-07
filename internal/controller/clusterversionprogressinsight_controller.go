@@ -255,11 +255,16 @@ func assessClusterVersion(
 	klog.V(2).Infof("CPI :: CV/%s :: Assessment=%s", cv.Name, assessment)
 
 	insight := &ouev1alpha1.ClusterVersionProgressInsightStatus{
-		Name:       cv.Name,
-		Assessment: assessment,
-		Versions:   versionsFromHistory(cv.Status.History),
-		Completion: completion,
-		StartedAt:  startedAt,
+		Name:                 cv.Name,
+		Assessment:           assessment,
+		Versions:             versionsFromHistory(cv.Status.History),
+		Completion:           completion,
+		StartedAt:            startedAt,
+		LastObservedProgress: previous.LastObservedProgress,
+	}
+
+	if completion != previous.Completion || insight.LastObservedProgress.IsZero() {
+		insight.LastObservedProgress = metav1.Now()
 	}
 
 	if oldUpdating := meta.FindStatusCondition(previous.Conditions, updating.Type); oldUpdating != nil {
