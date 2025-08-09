@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -97,21 +98,21 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 				State:          openshiftconfigv1.CompletedUpdate,
 				StartedTime:    minutesAgo[50],
 				CompletionTime: &minutesAgo[20],
-				Version:        "4.18.15",
+				Version:        v41815,
 				Image:          "quay.io/something/openshift-release:4.18.15-x86_64",
 			}
 
 			cvHistoryPartial15 = openshiftconfigv1.UpdateHistory{
 				State:       openshiftconfigv1.PartialUpdate,
 				StartedTime: minutesAgo[50],
-				Version:     "4.18.15",
+				Version:     v41815,
 				Image:       "quay.io/something/openshift-release:4.18.15-x86_64",
 			}
 
 			cvHistoryPartial16 = openshiftconfigv1.UpdateHistory{
 				State:       openshiftconfigv1.PartialUpdate,
 				StartedTime: minutesAgo[10],
-				Version:     "4.18.16",
+				Version:     v41816,
 				Image:       "quay.io/something/openshift-release:4.18.16-x86_64",
 			}
 
@@ -123,7 +124,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 					Versions: []openshiftconfigv1.OperandVersion{
 						{
 							Name:    "operator",
-							Version: "4.18.15",
+							Version: v41815,
 						},
 					},
 				},
@@ -137,7 +138,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 					Versions: []openshiftconfigv1.OperandVersion{
 						{
 							Name:    "operator",
-							Version: "4.18.15",
+							Version: v41815,
 						},
 					},
 				},
@@ -151,7 +152,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 					Versions: []openshiftconfigv1.OperandVersion{
 						{
 							Name:    "operator",
-							Version: "4.18.15",
+							Version: v41815,
 						},
 					},
 				},
@@ -165,7 +166,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 					Versions: []openshiftconfigv1.OperandVersion{
 						{
 							Name:    "operator",
-							Version: "4.18.16",
+							Version: v41816,
 						},
 					},
 				},
@@ -179,7 +180,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 					Versions: []openshiftconfigv1.OperandVersion{
 						{
 							Name:    "operator",
-							Version: "4.18.16",
+							Version: v41816,
 						},
 					},
 				},
@@ -193,7 +194,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 					Versions: []openshiftconfigv1.OperandVersion{
 						{
 							Name:    "operator",
-							Version: "4.18.16",
+							Version: v41816,
 						},
 					},
 				},
@@ -315,7 +316,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 							cvProgressingFalse15,
 						},
 						Desired: openshiftconfigv1.Release{
-							Version: "4.18.15",
+							Version: v41815,
 						},
 						History: []openshiftconfigv1.UpdateHistory{
 							cvHistoryCompleted15,
@@ -335,7 +336,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 				},
 				expectedVersions: &openshiftv1alpha1.ControlPlaneUpdateVersions{
 					Target: openshiftv1alpha1.Version{
-						Version: "4.18.15",
+						Version: v41815,
 						Metadata: []openshiftv1alpha1.VersionMetadata{
 							{
 								Key: openshiftv1alpha1.InstallationMetadata,
@@ -358,7 +359,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 							cvProgressingTrue16,
 						},
 						Desired: openshiftconfigv1.Release{
-							Version: "4.18.16",
+							Version: v41816,
 						},
 						History: []openshiftconfigv1.UpdateHistory{
 							cvHistoryPartial16,
@@ -378,7 +379,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 				},
 				expectedVersions: &openshiftv1alpha1.ControlPlaneUpdateVersions{
 					Target: openshiftv1alpha1.Version{
-						Version: "4.18.16",
+						Version: v41816,
 						Metadata: []openshiftv1alpha1.VersionMetadata{
 							{
 								Key: openshiftv1alpha1.InstallationMetadata,
@@ -401,7 +402,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 							cvProgressingTrue16,
 						},
 						Desired: openshiftconfigv1.Release{
-							Version: "4.18.16",
+							Version: v41816,
 						},
 						History: []openshiftconfigv1.UpdateHistory{
 							cvHistoryPartial16,
@@ -422,10 +423,10 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 				},
 				expectedVersions: &openshiftv1alpha1.ControlPlaneUpdateVersions{
 					Target: openshiftv1alpha1.Version{
-						Version: "4.18.16",
+						Version: v41816,
 					},
 					Previous: &openshiftv1alpha1.Version{
-						Version: "4.18.15",
+						Version: v41815,
 					},
 				},
 				expectedCompletion:  ptr.To(int32(33)),
@@ -443,7 +444,7 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 							cvProgressingTrue16,
 						},
 						Desired: openshiftconfigv1.Release{
-							Version: "4.18.16",
+							Version: v41816,
 						},
 						History: []openshiftconfigv1.UpdateHistory{
 							cvHistoryPartial16,
@@ -464,10 +465,10 @@ var _ = Describe("ClusterVersionProgressInsight Controller", Serial, func() {
 				},
 				expectedVersions: &openshiftv1alpha1.ControlPlaneUpdateVersions{
 					Target: openshiftv1alpha1.Version{
-						Version: "4.18.16",
+						Version: v41816,
 					},
 					Previous: &openshiftv1alpha1.Version{
-						Version: "4.18.15",
+						Version: v41815,
 						Metadata: []openshiftv1alpha1.VersionMetadata{
 							{
 								Key: openshiftv1alpha1.PartialMetadata,
@@ -631,14 +632,14 @@ func Test_IsControlPlaneUpdating(t *testing.T) {
 		State:          openshiftconfigv1.CompletedUpdate,
 		StartedTime:    minutesAge[50],
 		CompletionTime: &minutesAge[20],
-		Version:        "4.18.15",
+		Version:        v41815,
 		Image:          "quay.io/something/openshift-release:4.18.15-x86_64",
 	}
 
 	partialHistoryItem := openshiftconfigv1.UpdateHistory{
 		State:       openshiftconfigv1.PartialUpdate,
 		StartedTime: minutesAge[50],
-		Version:     "4.18.15",
+		Version:     v41815,
 		Image:       "quay.io/something/openshift-release:4.18.15-x86_64",
 	}
 
@@ -797,14 +798,14 @@ func Test_VersionsFromHistory(t *testing.T) {
 		State:          openshiftconfigv1.CompletedUpdate,
 		StartedTime:    minutesAgo[50],
 		CompletionTime: &minutesAgo[15],
-		Version:        "4.18.15",
+		Version:        v41815,
 		Image:          "quay.io/something/openshift-release:4.18.15-x86_64",
 	}
 
 	partial := openshiftconfigv1.UpdateHistory{
 		State:       openshiftconfigv1.PartialUpdate,
 		StartedTime: minutesAgo[5],
-		Version:     "4.18.15",
+		Version:     v41815,
 		Image:       "quay.io/something/openshift-release:4.18.15-x86_64",
 	}
 
@@ -812,7 +813,7 @@ func Test_VersionsFromHistory(t *testing.T) {
 		State:          openshiftconfigv1.CompletedUpdate,
 		StartedTime:    minutesAgo[5],
 		CompletionTime: &minutesAgo[2],
-		Version:        "4.18.16",
+		Version:        v41816,
 		Image:          "quay.io/something/openshift-release:4.18.16-x86_64",
 	}
 
@@ -833,7 +834,7 @@ func Test_VersionsFromHistory(t *testing.T) {
 			history: []openshiftconfigv1.UpdateHistory{completed},
 			expected: openshiftv1alpha1.ControlPlaneUpdateVersions{
 				Target: openshiftv1alpha1.Version{
-					Version: "4.18.15",
+					Version: v41815,
 					Metadata: []openshiftv1alpha1.VersionMetadata{
 						{
 							Key: openshiftv1alpha1.InstallationMetadata,
@@ -847,10 +848,10 @@ func Test_VersionsFromHistory(t *testing.T) {
 			history: []openshiftconfigv1.UpdateHistory{completed16, completed},
 			expected: openshiftv1alpha1.ControlPlaneUpdateVersions{
 				Target: openshiftv1alpha1.Version{
-					Version: "4.18.16",
+					Version: v41816,
 				},
 				Previous: &openshiftv1alpha1.Version{
-					Version: "4.18.15",
+					Version: v41815,
 				},
 			},
 		},
@@ -859,10 +860,10 @@ func Test_VersionsFromHistory(t *testing.T) {
 			history: []openshiftconfigv1.UpdateHistory{completed16, partial},
 			expected: openshiftv1alpha1.ControlPlaneUpdateVersions{
 				Target: openshiftv1alpha1.Version{
-					Version: "4.18.16",
+					Version: v41816,
 				},
 				Previous: &openshiftv1alpha1.Version{
-					Version: "4.18.15",
+					Version: v41815,
 					Metadata: []openshiftv1alpha1.VersionMetadata{
 						{
 							Key: openshiftv1alpha1.PartialMetadata,
@@ -1010,101 +1011,377 @@ func Test_ForcedHealthInsight(t *testing.T) {
 	}
 }
 
+func cvProgressing(status bool, version string, ltt metav1.Time) openshiftconfigv1.ClusterOperatorStatusCondition {
+	if status {
+		return openshiftconfigv1.ClusterOperatorStatusCondition{
+			Type:               openshiftconfigv1.OperatorProgressing,
+			Status:             openshiftconfigv1.ConditionTrue,
+			LastTransitionTime: ltt,
+			Message:            fmt.Sprintf("Working towards %s: 106 of 863 done (12%% complete), waiting on etcd, kube-apiserver", version),
+		}
+	}
+	return openshiftconfigv1.ClusterOperatorStatusCondition{
+		Type:               openshiftconfigv1.OperatorProgressing,
+		Status:             openshiftconfigv1.ConditionFalse,
+		LastTransitionTime: ltt,
+		Message:            fmt.Sprintf("Cluster version is %s", version),
+	}
+}
+
+func cvHistory(completed bool, version string, started metav1.Time, completion *metav1.Time) openshiftconfigv1.UpdateHistory {
+	uh := openshiftconfigv1.UpdateHistory{
+		StartedTime:    started,
+		CompletionTime: completion,
+		Version:        version,
+		Image:          fmt.Sprintf("quay.io/something/openshift-release:%s-x86_64", version),
+		State:          openshiftconfigv1.PartialUpdate,
+	}
+	if completed {
+		uh.State = openshiftconfigv1.CompletedUpdate
+	}
+
+	return uh
+}
+
 var (
-	cvProgressingFalse15 = openshiftconfigv1.ClusterOperatorStatusCondition{
-		Type:    openshiftconfigv1.OperatorProgressing,
-		Status:  openshiftconfigv1.ConditionFalse,
-		Message: "Cluster version is 4.18.15",
-	}
-
-	cvProgressingTrue16 = openshiftconfigv1.ClusterOperatorStatusCondition{
-		Type:    openshiftconfigv1.OperatorProgressing,
-		Status:  openshiftconfigv1.ConditionTrue,
-		Message: "Working towards 4.18.16: 106 of 863 done (12% complete), waiting on etcd, kube-apiserver",
-	}
-
-	cvHistoryCompleted15 = openshiftconfigv1.UpdateHistory{
-		State:   openshiftconfigv1.CompletedUpdate,
-		Version: "4.18.15",
-		Image:   "quay.io/something/openshift-release:4.18.15-x86_64",
-	}
-
-	// cvHistoryPartial15 = openshiftconfigv1.UpdateHistory{
-	// 	State:   openshiftconfigv1.PartialUpdate,
-	// 	Version: "4.18.15",
-	// 	Image:   "quay.io/something/openshift-release:4.18.15-x86_64",
-	// }
-
-	cvHistoryPartial16 = openshiftconfigv1.UpdateHistory{
-		State:   openshiftconfigv1.PartialUpdate,
-		Version: "4.18.16",
-		Image:   "quay.io/something/openshift-release:4.18.16-x86_64",
-	}
+	ignoreLastTransitionTime = cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime")
 )
 
-// TODO: func Test_AssessClusterVersion_Conditions(t *testing.T) {}
+const (
+	v41815 = "4.18.15"
+	v41816 = "4.18.16"
+)
 
-// TODO: func Test_AssessClusterVersion_Assessment(t *testing.T) {}
+func instantiateClusterOperator(name string, versions ...string) openshiftconfigv1.ClusterOperator {
+	if len(versions)%2 != 0 {
+		panic("versions must be even, each version must have a name and a version")
+	}
 
-// TODO: func Test_AssessClusterVersion_Versions(t *testing.T) {}
+	co := openshiftconfigv1.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Status:     openshiftconfigv1.ClusterOperatorStatus{},
+	}
+
+	for i := 0; i < len(versions); i += 2 {
+		co.Status.Versions = append(co.Status.Versions, openshiftconfigv1.OperandVersion{Name: versions[i], Version: versions[i+1]})
+	}
+	return co
+}
+
+func installing15(now time.Time) func(cv *openshiftconfigv1.ClusterVersion) {
+	minutesAgo := func(m int32) metav1.Time {
+		return metav1.NewTime(now.Add(-(time.Duration(m)) * time.Minute))
+	}
+
+	return func(cv *openshiftconfigv1.ClusterVersion) {
+		cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
+			cvProgressing(true, v41815, minutesAgo(30)),
+		}
+		cv.Status.History = []openshiftconfigv1.UpdateHistory{
+			cvHistory(false, v41815, minutesAgo(30), nil),
+		}
+		cv.Status.Desired.Version = cv.Status.History[0].Version
+	}
+}
+
+func installed15(now time.Time) func(cv *openshiftconfigv1.ClusterVersion) {
+	minutesAgo := func(m int32) metav1.Time {
+		return metav1.NewTime(now.Add(-(time.Duration(m)) * time.Minute))
+	}
+
+	return func(cv *openshiftconfigv1.ClusterVersion) {
+		cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
+			cvProgressing(false, v41815, minutesAgo(30)),
+		}
+		cv.Status.History = []openshiftconfigv1.UpdateHistory{
+			cvHistory(true, v41815, minutesAgo(50), ptr.To(minutesAgo(40))),
+		}
+		cv.Status.Desired.Version = cv.Status.History[0].Version
+	}
+}
+
+func updating15to16(now time.Time) func(cv *openshiftconfigv1.ClusterVersion) {
+	minutesAgo := func(m int32) metav1.Time {
+		return metav1.NewTime(now.Add(-(time.Duration(m)) * time.Minute))
+	}
+
+	return func(cv *openshiftconfigv1.ClusterVersion) {
+		cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
+			cvProgressing(true, v41816, minutesAgo(30)),
+		}
+		cv.Status.History = []openshiftconfigv1.UpdateHistory{
+			cvHistory(false, v41816, minutesAgo(30), nil),
+			cvHistory(true, v41815, minutesAgo(50), ptr.To(minutesAgo(40))),
+		}
+		cv.Status.Desired.Version = cv.Status.History[0].Version
+	}
+}
+
+func updated15to16(now time.Time) func(cv *openshiftconfigv1.ClusterVersion) {
+	minutesAgo := func(m int32) metav1.Time {
+		return metav1.NewTime(now.Add(-(time.Duration(m)) * time.Minute))
+	}
+
+	return func(cv *openshiftconfigv1.ClusterVersion) {
+		cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
+			cvProgressing(false, v41816, minutesAgo(30)),
+		}
+		cv.Status.History = []openshiftconfigv1.UpdateHistory{
+			cvHistory(true, v41816, minutesAgo(30), ptr.To(minutesAgo(20))),
+			cvHistory(true, v41815, minutesAgo(50), ptr.To(minutesAgo(40))),
+		}
+		cv.Status.Desired.Version = cv.Status.History[0].Version
+	}
+}
+
+func updatingPartial15to16(now time.Time) func(cv *openshiftconfigv1.ClusterVersion) {
+	minutesAgo := func(m int32) metav1.Time {
+		return metav1.NewTime(now.Add(-(time.Duration(m)) * time.Minute))
+	}
+
+	return func(cv *openshiftconfigv1.ClusterVersion) {
+		cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
+			cvProgressing(true, v41816, minutesAgo(30)),
+		}
+		cv.Status.History = []openshiftconfigv1.UpdateHistory{
+			cvHistory(false, v41816, minutesAgo(30), nil),
+			cvHistory(false, v41815, minutesAgo(50), nil),
+		}
+		cv.Status.Desired.Version = cv.Status.History[0].Version
+	}
+}
+
+func updatedPartial15to16(now time.Time) func(cv *openshiftconfigv1.ClusterVersion) {
+	minutesAgo := func(m int32) metav1.Time {
+		return metav1.NewTime(now.Add(-(time.Duration(m)) * time.Minute))
+	}
+
+	return func(cv *openshiftconfigv1.ClusterVersion) {
+		cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
+			cvProgressing(false, v41816, minutesAgo(30)),
+		}
+		cv.Status.History = []openshiftconfigv1.UpdateHistory{
+			cvHistory(true, v41816, minutesAgo(30), ptr.To(minutesAgo(20))),
+			cvHistory(false, v41815, minutesAgo(50), nil),
+		}
+		cv.Status.Desired.Version = cv.Status.History[0].Version
+	}
+}
+
+func Test_AssessClusterVersion_Conditions(t *testing.T) {
+	t.Parallel()
+
+	anchor := time.Now()
+
+	testCases := []struct {
+		name     string
+		expected []metav1.Condition
+
+		mutateCV func(*openshiftconfigv1.ClusterVersion)
+	}{
+		{
+			name: "Cluster is not updating",
+			expected: []metav1.Condition{
+				{
+					Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
+					Status:  metav1.ConditionFalse,
+					Reason:  string(openshiftv1alpha1.ClusterVersionNotProgressing),
+					Message: "ClusterVersion has Progressing=False(Reason=) | Message='Cluster version is 4.18.15'",
+				},
+			},
+			mutateCV: installed15(anchor),
+		},
+		{
+			name: "Cluster is updating",
+			expected: []metav1.Condition{
+				{
+					Type:    string(openshiftv1alpha1.ClusterVersionProgressInsightUpdating),
+					Status:  metav1.ConditionTrue,
+					Reason:  string(openshiftv1alpha1.ClusterVersionProgressing),
+					Message: "ClusterVersion has Progressing=True(Reason=) | Message='Working towards 4.18.16: 106 of 863 done (12% complete), waiting on etcd, kube-apiserver'",
+				},
+			},
+			mutateCV: updating15to16(anchor),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cv := &openshiftconfigv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Status:     openshiftconfigv1.ClusterVersionStatus{},
+			}
+
+			tc.mutateCV(cv)
+			var previous openshiftv1alpha1.ClusterVersionProgressInsightStatus
+			cos := &openshiftconfigv1.ClusterOperatorList{
+				Items: []openshiftconfigv1.ClusterOperator{
+					instantiateClusterOperator("etcd", "operator", v41815),
+					instantiateClusterOperator("kube-apiserver", "operator", v41815),
+				},
+			}
+
+			insight, _ := assessClusterVersion(cv, &previous, cos)
+			if diff := cmp.Diff(tc.expected, insight.Conditions, ignoreLastTransitionTime); diff != "" {
+				t.Errorf("expected conditions mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func Test_AssessClusterVersion_Assessment(t *testing.T) {
+	t.Parallel()
+
+	anchor := time.Now()
+
+	testCases := []struct {
+		name     string
+		expected openshiftv1alpha1.ClusterVersionAssessment
+
+		mutateCV func(*openshiftconfigv1.ClusterVersion)
+	}{
+		{
+			name:     "Cluster is not updating",
+			expected: openshiftv1alpha1.ClusterVersionAssessmentCompleted,
+			mutateCV: installed15(anchor),
+		},
+		{
+			name:     "Cluster is updating",
+			expected: openshiftv1alpha1.ClusterVersionAssessmentProgressing,
+			mutateCV: updating15to16(anchor),
+		},
+		// TODO: degraded / slow
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cv := &openshiftconfigv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Status:     openshiftconfigv1.ClusterVersionStatus{},
+			}
+
+			tc.mutateCV(cv)
+			var previous openshiftv1alpha1.ClusterVersionProgressInsightStatus
+			cos := &openshiftconfigv1.ClusterOperatorList{
+				Items: []openshiftconfigv1.ClusterOperator{
+					instantiateClusterOperator("etcd", "operator", v41815),
+					instantiateClusterOperator("kube-apiserver", "operator", v41815),
+				},
+			}
+
+			insight, _ := assessClusterVersion(cv, &previous, cos)
+			if diff := cmp.Diff(tc.expected, insight.Assessment); diff != "" {
+				t.Errorf("expected assessment mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func Test_AssessClusterVersion_Versions(t *testing.T) {
+	t.Parallel()
+
+	anchor := time.Now()
+
+	testCases := []struct {
+		name     string
+		expected openshiftv1alpha1.ControlPlaneUpdateVersions
+
+		mutateCV func(*openshiftconfigv1.ClusterVersion)
+	}{
+		{
+			name: "Installation in progress",
+			expected: openshiftv1alpha1.ControlPlaneUpdateVersions{
+				Target: openshiftv1alpha1.Version{
+					Version:  v41815,
+					Metadata: []openshiftv1alpha1.VersionMetadata{{Key: openshiftv1alpha1.InstallationMetadata}},
+				},
+			},
+			mutateCV: installing15(anchor),
+		},
+		{
+			name: "Installation completed",
+			expected: openshiftv1alpha1.ControlPlaneUpdateVersions{
+				Target: openshiftv1alpha1.Version{
+					Version:  v41815,
+					Metadata: []openshiftv1alpha1.VersionMetadata{{Key: openshiftv1alpha1.InstallationMetadata}},
+				},
+			},
+			mutateCV: installed15(anchor),
+		},
+		{
+			name: "Update in progress",
+			expected: openshiftv1alpha1.ControlPlaneUpdateVersions{
+				Target:   openshiftv1alpha1.Version{Version: v41816},
+				Previous: &openshiftv1alpha1.Version{Version: v41815},
+			},
+			mutateCV: updating15to16(anchor),
+		},
+		{
+			name: "Update completed",
+			expected: openshiftv1alpha1.ControlPlaneUpdateVersions{
+				Target:   openshiftv1alpha1.Version{Version: v41816},
+				Previous: &openshiftv1alpha1.Version{Version: v41815},
+			},
+			mutateCV: updated15to16(anchor),
+		},
+		{
+			name: "Update from partial in progress",
+			expected: openshiftv1alpha1.ControlPlaneUpdateVersions{
+				Target: openshiftv1alpha1.Version{Version: v41816},
+				Previous: &openshiftv1alpha1.Version{
+					Version:  v41815,
+					Metadata: []openshiftv1alpha1.VersionMetadata{{Key: openshiftv1alpha1.PartialMetadata}},
+				},
+			},
+			mutateCV: updatingPartial15to16(anchor),
+		},
+		{
+			name: "Update from partial completed",
+			expected: openshiftv1alpha1.ControlPlaneUpdateVersions{
+				Target: openshiftv1alpha1.Version{Version: v41816},
+				Previous: &openshiftv1alpha1.Version{
+					Version:  v41815,
+					Metadata: []openshiftv1alpha1.VersionMetadata{{Key: openshiftv1alpha1.PartialMetadata}},
+				},
+			},
+			mutateCV: updatedPartial15to16(anchor),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cv := &openshiftconfigv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Status:     openshiftconfigv1.ClusterVersionStatus{},
+			}
+
+			tc.mutateCV(cv)
+			var previous openshiftv1alpha1.ClusterVersionProgressInsightStatus
+			cos := &openshiftconfigv1.ClusterOperatorList{
+				Items: []openshiftconfigv1.ClusterOperator{
+					instantiateClusterOperator("etcd", "operator", v41815),
+					instantiateClusterOperator("kube-apiserver", "operator", v41815),
+				},
+			}
+
+			insight, _ := assessClusterVersion(cv, &previous, cos)
+			if diff := cmp.Diff(tc.expected, insight.Versions); diff != "" {
+				t.Errorf("expected versions mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
 
 func Test_AssessClusterVersion_Completion(t *testing.T) {
 	t.Parallel()
 
-	now := metav1.Now()
-	minutesAgo := func(m int) metav1.Time {
-		return metav1.NewTime(now.Add(-(time.Duration(m)) * time.Minute))
-	}
-
-	condition := func(c openshiftconfigv1.ClusterOperatorStatusCondition, ltt metav1.Time) openshiftconfigv1.ClusterOperatorStatusCondition {
-		n := c.DeepCopy()
-		n.LastTransitionTime = ltt
-		return *n
-	}
-
-	history := func(h openshiftconfigv1.UpdateHistory, started metav1.Time, completion *metav1.Time) openshiftconfigv1.UpdateHistory {
-		n := h.DeepCopy()
-		n.StartedTime = started
-		n.CompletionTime = completion
-		return *n
-	}
-
-	co := func(name string, versions ...string) openshiftconfigv1.ClusterOperator {
-		if len(versions)%2 != 0 {
-			panic("versions must be even, each version must have a name and a version")
-		}
-
-		co := openshiftconfigv1.ClusterOperator{
-			ObjectMeta: metav1.ObjectMeta{Name: name},
-			Status:     openshiftconfigv1.ClusterOperatorStatus{},
-		}
-
-		for i := 0; i < len(versions); i += 2 {
-			co.Status.Versions = append(co.Status.Versions, openshiftconfigv1.OperandVersion{Name: versions[i], Version: versions[i+1]})
-		}
-		return co
-	}
-
-	installed15 := func(cv *openshiftconfigv1.ClusterVersion) {
-		cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
-			condition(cvProgressingFalse15, minutesAgo(40)),
-		}
-		cv.Status.History = []openshiftconfigv1.UpdateHistory{
-			history(cvHistoryCompleted15, minutesAgo(50), ptr.To(minutesAgo(40))),
-		}
-		cv.Status.Desired.Version = cv.Status.History[0].Version
-	}
-
-	updating15to16 := func(cv *openshiftconfigv1.ClusterVersion) {
-		cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
-			condition(cvProgressingTrue16, minutesAgo(30)),
-		}
-		cv.Status.History = []openshiftconfigv1.UpdateHistory{
-			history(cvHistoryPartial16, minutesAgo(30), nil),
-			history(cvHistoryCompleted15, minutesAgo(50), ptr.To(minutesAgo(40))),
-		}
-		cv.Status.Desired.Version = cv.Status.History[0].Version
-	}
+	anchor := time.Now()
 
 	testCases := []struct {
 		name             string
@@ -1117,64 +1394,56 @@ func Test_AssessClusterVersion_Completion(t *testing.T) {
 			name:     "Progressing=False means completed update or installation",
 			expected: 100,
 
-			mutateBaselineCV: installed15,
+			mutateBaselineCV: installed15(anchor),
 			cos: []openshiftconfigv1.ClusterOperator{
-				co("etcd", "operator", cvHistoryCompleted15.Version),
-				co("kube-apiserver", "operator", cvHistoryCompleted15.Version),
+				instantiateClusterOperator("etcd", "operator", v41815),
+				instantiateClusterOperator("kube-apiserver", "operator", v41815),
 			},
 		},
 		{
 			name:     "Progressing=False means completed even if there are COs not on desired version (inconsistent state)",
 			expected: 100,
 
-			mutateBaselineCV: func(cv *openshiftconfigv1.ClusterVersion) {
-				cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
-					condition(cvProgressingFalse15, minutesAgo(40)),
-				}
-				cv.Status.History = []openshiftconfigv1.UpdateHistory{
-					history(cvHistoryCompleted15, minutesAgo(50), ptr.To(minutesAgo(40))),
-				}
-				cv.Status.Desired.Version = cv.Status.History[0].Version
-			},
+			mutateBaselineCV: installed15(anchor),
 			cos: []openshiftconfigv1.ClusterOperator{
-				co("etcd", "operator", cvHistoryCompleted15.Version),
-				co("kube-controller-manager", "operator", "4.18.14"),
+				instantiateClusterOperator("etcd", "operator", v41815),
+				instantiateClusterOperator("kube-controller-manager", "operator", "4.18.14"),
 			},
 		},
 		{
 			name:             "Progressing=True means update in progress | Pending operators are not updated",
 			expected:         0,
-			mutateBaselineCV: updating15to16,
+			mutateBaselineCV: updating15to16(anchor),
 			cos: []openshiftconfigv1.ClusterOperator{
-				co("etcd", "operator", cvHistoryCompleted15.Version),
-				co("kube-apiserver", "operator", cvHistoryCompleted15.Version),
+				instantiateClusterOperator("etcd", "operator", v41815),
+				instantiateClusterOperator("kube-apiserver", "operator", v41815),
 			},
 		},
 		{
 			name:             "Progressing=True means update in progress | Operators without a version are not updated",
 			expected:         0,
-			mutateBaselineCV: updating15to16,
+			mutateBaselineCV: updating15to16(anchor),
 			cos: []openshiftconfigv1.ClusterOperator{
-				co("etcd", "operator", cvHistoryCompleted15.Version),
-				co("kube-apiserver", "not-operator", cvHistoryPartial16.Version),
+				instantiateClusterOperator("etcd", "operator", v41815),
+				instantiateClusterOperator("kube-apiserver", "not-operator", v41816),
 			},
 		},
 		{
 			name:             "Progressing=True means update in progress | Updated operators",
 			expected:         50,
-			mutateBaselineCV: updating15to16,
+			mutateBaselineCV: updating15to16(anchor),
 			cos: []openshiftconfigv1.ClusterOperator{
-				co("etcd", "operator", cvHistoryCompleted15.Version),
-				co("kube-apiserver", "operator", cvHistoryPartial16.Version),
+				instantiateClusterOperator("etcd", "operator", v41815),
+				instantiateClusterOperator("kube-apiserver", "operator", v41816),
 			},
 		},
 		{
 			name:             "Progressing=True means update in progress | All updated operators",
 			expected:         100,
-			mutateBaselineCV: updating15to16,
+			mutateBaselineCV: updating15to16(anchor),
 			cos: []openshiftconfigv1.ClusterOperator{
-				co("etcd", "operator", cvHistoryPartial16.Version),
-				co("kube-apiserver", "operator", cvHistoryPartial16.Version),
+				instantiateClusterOperator("etcd", "operator", v41816),
+				instantiateClusterOperator("kube-apiserver", "operator", v41816),
 			},
 		},
 	}
@@ -1200,128 +1469,210 @@ func Test_AssessClusterVersion_Completion(t *testing.T) {
 	}
 }
 
-func Test_AssessClusterVersion_LastObservedProgress(t *testing.T) {
+func Test_AssessClusterVersion_StartedCompleted(t *testing.T) {
 	t.Parallel()
 
-	now := metav1.Now()
-	minutesAgo := func(m int) metav1.Time {
-		return metav1.NewTime(now.Add(-(time.Duration(m)) * time.Minute))
-	}
-
-	condition := func(c openshiftconfigv1.ClusterOperatorStatusCondition, ltt metav1.Time) openshiftconfigv1.ClusterOperatorStatusCondition {
-		n := c.DeepCopy()
-		n.LastTransitionTime = ltt
-		return *n
-	}
-
-	history := func(h openshiftconfigv1.UpdateHistory, started metav1.Time, completion *metav1.Time) openshiftconfigv1.UpdateHistory {
-		n := h.DeepCopy()
-		n.StartedTime = started
-		n.CompletionTime = completion
-		return *n
-	}
-
-	co := func(name string, versions ...string) openshiftconfigv1.ClusterOperator {
-		if len(versions)%2 != 0 {
-			panic("versions must be even, each version must have a name and a version")
-		}
-
-		co := openshiftconfigv1.ClusterOperator{
-			ObjectMeta: metav1.ObjectMeta{Name: name},
-			Status:     openshiftconfigv1.ClusterOperatorStatus{},
-		}
-
-		for i := 0; i < len(versions); i += 2 {
-			co.Status.Versions = append(co.Status.Versions, openshiftconfigv1.OperandVersion{Name: versions[i], Version: versions[i+1]})
-		}
-		return co
-	}
-
-	installed15 := func(cv *openshiftconfigv1.ClusterVersion) {
-		cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
-			condition(cvProgressingFalse15, minutesAgo(40)),
-		}
-		cv.Status.History = []openshiftconfigv1.UpdateHistory{
-			history(cvHistoryCompleted15, minutesAgo(50), ptr.To(minutesAgo(40))),
-		}
-		cv.Status.Desired.Version = cv.Status.History[0].Version
-	}
-
-	updating15to16 := func(cv *openshiftconfigv1.ClusterVersion) {
-		cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
-			condition(cvProgressingTrue16, minutesAgo(30)),
-		}
-		cv.Status.History = []openshiftconfigv1.UpdateHistory{
-			history(cvHistoryPartial16, minutesAgo(30), nil),
-			history(cvHistoryCompleted15, minutesAgo(50), ptr.To(minutesAgo(40))),
-		}
-		cv.Status.Desired.Version = cv.Status.History[0].Version
+	anchor := time.Now()
+	minutesAgo := func(m int32) metav1.Time {
+		return metav1.NewTime(anchor.Add(-(time.Duration(m)) * time.Minute))
 	}
 
 	testCases := []struct {
-		name string
+		name            string
+		lastHistoryItem openshiftconfigv1.UpdateHistory
 
-		previousCompletion int32
-		mutateBaselineCV   func(*openshiftconfigv1.ClusterVersion)
-		cos                []openshiftconfigv1.ClusterOperator
-
-		expectChange bool
+		expectedStarted   metav1.Time
+		expectedCompleted *metav1.Time
 	}{
 		{
-			name:               "was completed, is completed",
-			previousCompletion: 100,
-			expectChange:       false,
+			name:              "Cluster is not updating, last history item completed",
+			lastHistoryItem:   cvHistory(true, v41815, minutesAgo(30), ptr.To(minutesAgo(20))),
+			expectedStarted:   minutesAgo(30),
+			expectedCompleted: ptr.To(minutesAgo(20)),
+		},
+		{
+			name:            "Cluster is updating, last history item partial",
+			lastHistoryItem: cvHistory(false, v41815, minutesAgo(20), nil),
+			expectedStarted: minutesAgo(20),
+		},
+	}
 
-			mutateBaselineCV: installed15,
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var progressing openshiftconfigv1.ClusterOperatorStatusCondition
+			if tc.lastHistoryItem.State == openshiftconfigv1.CompletedUpdate {
+				// Make Progressing condition different to test that UpdateHistory times are used
+				ltt := (*tc.lastHistoryItem.CompletionTime).Add(-time.Minute)
+				progressing = cvProgressing(false, tc.lastHistoryItem.Version, metav1.NewTime(ltt))
+			} else {
+				// Make Progressing condition different to test that UpdateHistory times are used
+				ltt := tc.lastHistoryItem.StartedTime.Add(-time.Minute)
+				progressing = cvProgressing(true, tc.lastHistoryItem.Version, metav1.NewTime(ltt))
+			}
+
+			cv := &openshiftconfigv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Status: openshiftconfigv1.ClusterVersionStatus{
+					Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{progressing},
+					History:    []openshiftconfigv1.UpdateHistory{tc.lastHistoryItem},
+					Desired: openshiftconfigv1.Release{
+						Version: tc.lastHistoryItem.Version,
+					},
+				},
+			}
+			var previous openshiftv1alpha1.ClusterVersionProgressInsightStatus
+			cos := &openshiftconfigv1.ClusterOperatorList{
+				Items: []openshiftconfigv1.ClusterOperator{
+					instantiateClusterOperator("etcd", "operator", tc.lastHistoryItem.Version),
+					instantiateClusterOperator("kube-apiserver", "operator", tc.lastHistoryItem.Version),
+				},
+			}
+
+			insight, _ := assessClusterVersion(cv, &previous, cos)
+			if diff := cmp.Diff(tc.expectedStarted, insight.StartedAt); diff != "" {
+				t.Errorf("expected StartedAt mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.expectedCompleted, insight.CompletedAt); diff != "" {
+				t.Errorf("expected CompletedAt mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func Test_AssessClusterVersion_EstimatedCompletedAt(t *testing.T) {
+	t.Parallel()
+	anchor := time.Now()
+	minutesAgo := func(m int32) metav1.Time {
+		return metav1.NewTime(anchor.Add(-(time.Duration(m)) * time.Minute))
+	}
+
+	testCases := []struct {
+		name     string
+		expected *metav1.Time
+
+		mutateCV               func(*openshiftconfigv1.ClusterVersion)
+		lastObservedProgress   metav1.Time
+		lastObservedCompletion int32
+		cos                    []openshiftconfigv1.ClusterOperator
+	}{
+		{
+			name:     "No estimation when not updating",
+			expected: nil,
+
+			mutateCV:             installed15(anchor),
+			lastObservedProgress: minutesAgo(40),
 			cos: []openshiftconfigv1.ClusterOperator{
-				co("etcd", "operator", cvHistoryCompleted15.Version),
-				co("kube-apiserver", "operator", cvHistoryCompleted15.Version),
+				instantiateClusterOperator("etcd", "operator", v41815),
+				instantiateClusterOperator("kube-apiserver", "operator", v41815),
 			},
 		},
 		{
-			name:               "was updating, is completed",
-			previousCompletion: 99,
-			expectChange:       true,
+			name: "Early in the update, baseline is hardcoded if no history is available",
+			// Baseline expectation is 60m + 20% = 72m, and we are 1m into the update => 71m
+			expected: ptr.To(metav1.NewTime(anchor.Add(71 * time.Minute))),
 
-			mutateBaselineCV: installed15,
+			mutateCV: func(cv *openshiftconfigv1.ClusterVersion) {
+				cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
+					cvProgressing(true, v41816, minutesAgo(1)),
+				}
+				cv.Status.History = []openshiftconfigv1.UpdateHistory{
+					cvHistory(false, v41816, minutesAgo(1), nil),
+					cvHistory(true, v41815, minutesAgo(120), ptr.To(minutesAgo(60))),
+				}
+				cv.Status.Desired.Version = v41816
+			},
+			lastObservedProgress: minutesAgo(1),
 			cos: []openshiftconfigv1.ClusterOperator{
-				co("etcd", "operator", cvHistoryCompleted15.Version),
-				co("kube-apiserver", "operator", cvHistoryCompleted15.Version),
+				instantiateClusterOperator("etcd", "operator", v41815),
+				instantiateClusterOperator("kube-apiserver", "operator", v41815),
 			},
 		},
 		{
-			name:               "was completed, started updating",
-			previousCompletion: 100,
-			expectChange:       true,
+			name:     "Early in the update, last completed update is used as baseline",
+			expected: ptr.To(metav1.NewTime(anchor.Add(23 * time.Minute))),
 
-			mutateBaselineCV: updating15to16,
+			mutateCV: func(cv *openshiftconfigv1.ClusterVersion) {
+				cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
+					cvProgressing(true, v41816, minutesAgo(1)),
+				}
+				cv.Status.History = []openshiftconfigv1.UpdateHistory{
+					cvHistory(false, v41816, minutesAgo(1), nil),
+					cvHistory(true, v41815, minutesAgo(60), ptr.To(minutesAgo(40))),
+					cvHistory(true, "4.18.14", minutesAgo(120), ptr.To(minutesAgo(60))),
+				}
+				cv.Status.Desired.Version = v41816
+			},
+			lastObservedProgress: minutesAgo(1),
 			cos: []openshiftconfigv1.ClusterOperator{
-				co("etcd", "operator", cvHistoryCompleted15.Version),
-				co("kube-apiserver", "operator", cvHistoryPartial16.Version),
+				instantiateClusterOperator("etcd", "operator", v41815),
+				instantiateClusterOperator("kube-apiserver", "operator", v41815),
 			},
 		},
 		{
-			name:               "was updating, progressed",
-			previousCompletion: 33,
-			expectChange:       true,
+			name:     "Baseline is used until enough progress is observed",
+			expected: ptr.To(metav1.NewTime(anchor.Add(12 * time.Minute))),
 
-			mutateBaselineCV: updating15to16,
+			mutateCV: func(cv *openshiftconfigv1.ClusterVersion) {
+				cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
+					cvProgressing(true, v41816, minutesAgo(10)),
+				}
+				cv.Status.History = []openshiftconfigv1.UpdateHistory{
+					cvHistory(false, v41816, minutesAgo(10), nil),
+					cvHistory(true, v41815, minutesAgo(60), ptr.To(minutesAgo(40))),
+					cvHistory(true, "4.18.14", minutesAgo(120), ptr.To(minutesAgo(60))),
+				}
+				cv.Status.Desired.Version = v41816
+			},
+			lastObservedProgress: minutesAgo(10),
 			cos: []openshiftconfigv1.ClusterOperator{
-				co("etcd", "operator", cvHistoryCompleted15.Version),
-				co("kube-apiserver", "operator", cvHistoryPartial16.Version),
-				co("openshift-apiserver", "operator", cvHistoryPartial16.Version),
+				instantiateClusterOperator("etcd", "operator", v41815),
+				instantiateClusterOperator("kube-apiserver", "operator", v41815),
 			},
 		},
 		{
-			name:               "was updating, did not progress",
-			previousCompletion: 33,
-			expectChange:       false,
+			name:     "Once enough progress is observed, estimation is based on the last observed progress",
+			expected: ptr.To(metav1.NewTime(anchor.Add(75 * time.Minute))),
 
-			mutateBaselineCV: updating15to16,
+			mutateCV: func(cv *openshiftconfigv1.ClusterVersion) {
+				cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
+					cvProgressing(true, v41816, minutesAgo(40)),
+				}
+				cv.Status.History = []openshiftconfigv1.UpdateHistory{
+					cvHistory(false, v41816, minutesAgo(40), nil),
+					cvHistory(true, v41815, minutesAgo(60), ptr.To(minutesAgo(40))),
+					cvHistory(true, "4.18.14", minutesAgo(120), ptr.To(minutesAgo(60))),
+				}
+				cv.Status.Desired.Version = v41816
+			},
+			// Actual last observed progress will be now, because completion is before assessment is zero
+			// and this assessment will see etcd CO updated
+			lastObservedProgress: minutesAgo(10),
 			cos: []openshiftconfigv1.ClusterOperator{
-				co("etcd", "operator", cvHistoryCompleted15.Version),
-				co("kube-apiserver", "operator", cvHistoryCompleted15.Version),
-				co("openshift-apiserver", "operator", cvHistoryPartial16.Version),
+				instantiateClusterOperator("etcd", "operator", v41816),
+				instantiateClusterOperator("kube-apiserver", "operator", v41815),
+			},
+		},
+		{
+			name:     "Once enough progress is observed, estimation is based on earlier last observed progress ",
+			expected: ptr.To(metav1.NewTime(anchor.Add(63 * time.Minute))),
+			mutateCV: func(cv *openshiftconfigv1.ClusterVersion) {
+				cv.Status.Conditions = []openshiftconfigv1.ClusterOperatorStatusCondition{
+					cvProgressing(true, v41816, minutesAgo(50)),
+				}
+				cv.Status.History = []openshiftconfigv1.UpdateHistory{
+					cvHistory(false, v41816, minutesAgo(50), nil),
+					cvHistory(true, v41815, minutesAgo(70), ptr.To(minutesAgo(50))),
+					cvHistory(true, "4.18.14", minutesAgo(130), ptr.To(minutesAgo(70))),
+				}
+				cv.Status.Desired.Version = v41816
+			},
+			lastObservedProgress:   minutesAgo(10),
+			lastObservedCompletion: 50,
+			cos: []openshiftconfigv1.ClusterOperator{
+				instantiateClusterOperator("etcd", "operator", v41816),
+				instantiateClusterOperator("kube-apiserver", "operator", v41815),
 			},
 		},
 	}
@@ -1332,41 +1683,34 @@ func Test_AssessClusterVersion_LastObservedProgress(t *testing.T) {
 
 			cv := &openshiftconfigv1.ClusterVersion{
 				ObjectMeta: metav1.ObjectMeta{Name: "version"},
-				Status:     openshiftconfigv1.ClusterVersionStatus{},
-			}
-			tc.mutateBaselineCV(cv)
-			previous := openshiftv1alpha1.ClusterVersionProgressInsightStatus{
-				Completion:           tc.previousCompletion,
-				LastObservedProgress: now,
+				Status: openshiftconfigv1.ClusterVersionStatus{
+					Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{},
+					History:    []openshiftconfigv1.UpdateHistory{},
+				},
 			}
 
+			tc.mutateCV(cv)
+			previous := openshiftv1alpha1.ClusterVersionProgressInsightStatus{
+				LastObservedProgress: tc.lastObservedProgress,
+				Completion:           tc.lastObservedCompletion,
+			}
 			var cos openshiftconfigv1.ClusterOperatorList
 			cos.Items = append(cos.Items, tc.cos...)
+
 			insight, _ := assessClusterVersion(cv, &previous, &cos)
-			if tc.expectChange {
-				if tc.previousCompletion == insight.Completion {
-					t.Errorf("expected Completion to change, but it did not")
+			switch {
+			case tc.expected != nil && insight.EstimatedCompletedAt != nil:
+				if diff := cmp.Diff(*tc.expected, *insight.EstimatedCompletedAt, cmpopts.EquateApproxTime(time.Second)); diff != "" {
+					t.Errorf("expected EstimatedCompletion mismatch (-want +got):\n%s", diff)
 				}
-				if now == insight.LastObservedProgress {
-					t.Errorf("expected LastObservedProgress to change, but it did not")
-				}
-			} else {
-				if tc.previousCompletion != insight.Completion {
-					t.Errorf("expected Completion to remain the same, but it changed from %d to %d", tc.previousCompletion, insight.Completion)
-				}
-				if now != insight.LastObservedProgress {
-					t.Errorf("expected LastObservedProgress to remain the same, but it changed from %v to %v", now, insight.LastObservedProgress)
-				}
+			case tc.expected == nil && insight.EstimatedCompletedAt != nil:
+				t.Errorf("expected no EstimatedCompletion, got %s", insight.EstimatedCompletedAt.String())
+			case tc.expected != nil && insight.EstimatedCompletedAt == nil:
+				t.Errorf("expected EstimatedCompletion %s, got nil", tc.expected.String())
 			}
 		})
 	}
 }
-
-// TODO: func Test_AssessClusterVersion_StartedCompleted(t *testing.T) {}
-
-// TODO: func Test_AssessClusterVersion_EstimatedCompletedAt(t *testing.T) {}
-
-// TODO: func Test_AssessClusterVersion_ForcedHealthInsight(t *testing.T) {}
 
 func Test_AssessClusterVersion(t *testing.T) {
 	t.Parallel()
@@ -1396,21 +1740,21 @@ func Test_AssessClusterVersion(t *testing.T) {
 			State:          openshiftconfigv1.CompletedUpdate,
 			StartedTime:    minutesAgo[50],
 			CompletionTime: &minutesAgo[40],
-			Version:        "4.18.15",
+			Version:        v41815,
 			Image:          "quay.io/something/openshift-release:4.18.15-x86_64",
 		}
 
 		cvHistoryPartial15 = openshiftconfigv1.UpdateHistory{
 			State:       openshiftconfigv1.PartialUpdate,
 			StartedTime: minutesAgo[50],
-			Version:     "4.18.15",
+			Version:     v41815,
 			Image:       "quay.io/something/openshift-release:4.18.15-x86_64",
 		}
 
 		cvHistoryPartial16 = openshiftconfigv1.UpdateHistory{
 			State:       openshiftconfigv1.PartialUpdate,
 			StartedTime: minutesAgo[30],
-			Version:     "4.18.16",
+			Version:     v41816,
 			Image:       "quay.io/something/openshift-release:4.18.16-x86_64",
 		}
 
@@ -1422,7 +1766,7 @@ func Test_AssessClusterVersion(t *testing.T) {
 				Versions: []openshiftconfigv1.OperandVersion{
 					{
 						Name:    "operator",
-						Version: "4.18.15",
+						Version: v41815,
 					},
 				},
 			},
@@ -1436,7 +1780,7 @@ func Test_AssessClusterVersion(t *testing.T) {
 				Versions: []openshiftconfigv1.OperandVersion{
 					{
 						Name:    "operator",
-						Version: "4.18.15",
+						Version: v41815,
 					},
 				},
 			},
@@ -1450,7 +1794,7 @@ func Test_AssessClusterVersion(t *testing.T) {
 				Versions: []openshiftconfigv1.OperandVersion{
 					{
 						Name:    "operator",
-						Version: "4.18.15",
+						Version: v41815,
 					},
 				},
 			},
@@ -1464,7 +1808,7 @@ func Test_AssessClusterVersion(t *testing.T) {
 				Versions: []openshiftconfigv1.OperandVersion{
 					{
 						Name:    "operator",
-						Version: "4.18.16",
+						Version: v41816,
 					},
 				},
 			},
@@ -1478,7 +1822,7 @@ func Test_AssessClusterVersion(t *testing.T) {
 				Versions: []openshiftconfigv1.OperandVersion{
 					{
 						Name:    "operator",
-						Version: "4.18.16",
+						Version: v41816,
 					},
 				},
 			},
@@ -1534,7 +1878,7 @@ func Test_AssessClusterVersion(t *testing.T) {
 				CompletedAt: cvHistoryCompleted15.CompletionTime,
 				Versions: openshiftv1alpha1.ControlPlaneUpdateVersions{
 					Target: openshiftv1alpha1.Version{
-						Version: "4.18.15",
+						Version: v41815,
 						Metadata: []openshiftv1alpha1.VersionMetadata{
 							{
 								Key: openshiftv1alpha1.InstallationMetadata,
@@ -1551,7 +1895,7 @@ func Test_AssessClusterVersion(t *testing.T) {
 					cvProgressingTrue16,
 				},
 				Desired: openshiftconfigv1.Release{
-					Version: "4.18.16",
+					Version: v41816,
 				},
 				History: []openshiftconfigv1.UpdateHistory{
 					cvHistoryPartial16,
@@ -1577,7 +1921,7 @@ func Test_AssessClusterVersion(t *testing.T) {
 				StartedAt: cvHistoryPartial16.StartedTime,
 				Versions: openshiftv1alpha1.ControlPlaneUpdateVersions{
 					Target: openshiftv1alpha1.Version{
-						Version: "4.18.16",
+						Version: v41816,
 						Metadata: []openshiftv1alpha1.VersionMetadata{
 							{
 								Key: openshiftv1alpha1.InstallationMetadata,
@@ -1594,7 +1938,7 @@ func Test_AssessClusterVersion(t *testing.T) {
 					cvProgressingTrue16,
 				},
 				Desired: openshiftconfigv1.Release{
-					Version: "4.18.16",
+					Version: v41816,
 				},
 				History: []openshiftconfigv1.UpdateHistory{
 					cvHistoryPartial16,
@@ -1621,10 +1965,10 @@ func Test_AssessClusterVersion(t *testing.T) {
 				StartedAt: cvHistoryPartial16.StartedTime,
 				Versions: openshiftv1alpha1.ControlPlaneUpdateVersions{
 					Target: openshiftv1alpha1.Version{
-						Version: "4.18.16",
+						Version: v41816,
 					},
 					Previous: &openshiftv1alpha1.Version{
-						Version: "4.18.15",
+						Version: v41815,
 					},
 				},
 			},
@@ -1660,10 +2004,10 @@ func Test_AssessClusterVersion(t *testing.T) {
 				StartedAt: cvHistoryPartial16.StartedTime,
 				Versions: openshiftv1alpha1.ControlPlaneUpdateVersions{
 					Target: openshiftv1alpha1.Version{
-						Version: "4.18.16",
+						Version: v41816,
 					},
 					Previous: &openshiftv1alpha1.Version{
-						Version: "4.18.15",
+						Version: v41815,
 						Metadata: []openshiftv1alpha1.VersionMetadata{
 							{
 								Key: openshiftv1alpha1.PartialMetadata,
@@ -1679,10 +2023,6 @@ func Test_AssessClusterVersion(t *testing.T) {
 	ignoreInProgressInsight := cmpopts.IgnoreFields(
 		openshiftv1alpha1.ClusterVersionProgressInsightStatus{},
 		"EstimatedCompletedAt",
-	)
-	ignoreLastTransitionTime := cmpopts.IgnoreFields(
-		metav1.Condition{},
-		"LastTransitionTime",
 	)
 
 	for _, tc := range testCases {
@@ -1707,6 +2047,192 @@ func Test_AssessClusterVersion(t *testing.T) {
 
 			if diff := cmp.Diff(healthInsights, tc.expectedHealthInsights); diff != "" {
 				t.Errorf("expected UpdateHealthInsight mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func Test_AssessClusterVersion_ForcedHealthInsight(t *testing.T) {
+	t.Parallel()
+
+	anchor := time.Now()
+	testCases := []struct {
+		name     string
+		expected *openshiftv1alpha1.UpdateHealthInsightStatus
+		mutateCV func(*openshiftconfigv1.ClusterVersion)
+	}{
+		{
+			name:     "No forced health insight when CV is not annotated",
+			expected: nil,
+			mutateCV: func(cv *openshiftconfigv1.ClusterVersion) {
+				delete(cv.Annotations, uscForceHealthInsightAnnotation)
+			},
+		},
+		{
+			name: "Forced health insight when CV is annotated",
+			expected: &openshiftv1alpha1.UpdateHealthInsightStatus{
+				StartedAt: metav1.NewTime(anchor),
+				Scope: openshiftv1alpha1.InsightScope{
+					Type:      openshiftv1alpha1.ControlPlaneScope,
+					Resources: []openshiftv1alpha1.ResourceRef{{Resource: "clusterversions", Group: openshiftconfigv1.GroupName, Name: "version"}},
+				},
+				Impact: openshiftv1alpha1.InsightImpact{
+					Level:       openshiftv1alpha1.InfoImpactLevel,
+					Type:        openshiftv1alpha1.NoneImpactType,
+					Summary:     "Forced health insight for ClusterVersion version",
+					Description: fmt.Sprintf("The resource has a %q annotation which forces USC to generate this health insight for testing purposes.", uscForceHealthInsightAnnotation),
+				},
+				Remediation: openshiftv1alpha1.InsightRemediation{
+					Reference: "https://issues.redhat.com/browse/OTA-1418",
+				},
+			},
+			mutateCV: func(cv *openshiftconfigv1.ClusterVersion) {
+				if cv.Annotations == nil {
+					cv.Annotations = make(map[string]string)
+				}
+				cv.Annotations[uscForceHealthInsightAnnotation] = "true"
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cv := &openshiftconfigv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "version",
+				},
+			}
+			updating15to16(anchor)(cv)
+			tc.mutateCV(cv)
+			var previous openshiftv1alpha1.ClusterVersionProgressInsightStatus
+			cos := &openshiftconfigv1.ClusterOperatorList{
+				Items: []openshiftconfigv1.ClusterOperator{
+					instantiateClusterOperator("etcd", "operator", v41815),
+					instantiateClusterOperator("kube-apiserver", "operator", v41816),
+				},
+			}
+
+			var expected []*openshiftv1alpha1.UpdateHealthInsightStatus
+			if tc.expected != nil {
+				expected = []*openshiftv1alpha1.UpdateHealthInsightStatus{tc.expected}
+			}
+
+			_, healthInsights := assessClusterVersion(cv, &previous, cos)
+			if diff := cmp.Diff(expected, healthInsights, cmpopts.EquateApproxTime(time.Second)); diff != "" {
+				t.Errorf("expected UpdateHealthInsight mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+
+}
+
+func Test_AssessClusterVersion_LastObservedProgress(t *testing.T) {
+	t.Parallel()
+
+	anchor := time.Now()
+
+	testCases := []struct {
+		name string
+
+		previousCompletion int32
+		mutateBaselineCV   func(*openshiftconfigv1.ClusterVersion)
+		cos                []openshiftconfigv1.ClusterOperator
+
+		expectChange bool
+	}{
+		{
+			name:               "was completed, is completed",
+			previousCompletion: 100,
+			expectChange:       false,
+
+			mutateBaselineCV: installed15(anchor),
+			cos: []openshiftconfigv1.ClusterOperator{
+				instantiateClusterOperator("etcd", "operator", v41815),
+				instantiateClusterOperator("kube-apiserver", "operator", v41815),
+			},
+		},
+		{
+			name:               "was updating, is completed",
+			previousCompletion: 99,
+			expectChange:       true,
+
+			mutateBaselineCV: installed15(anchor),
+			cos: []openshiftconfigv1.ClusterOperator{
+				instantiateClusterOperator("etcd", "operator", v41815),
+				instantiateClusterOperator("kube-apiserver", "operator", v41815),
+			},
+		},
+		{
+			name:               "was completed, started updating",
+			previousCompletion: 100,
+			expectChange:       true,
+
+			mutateBaselineCV: updating15to16(anchor),
+			cos: []openshiftconfigv1.ClusterOperator{
+				instantiateClusterOperator("etcd", "operator", v41815),
+				instantiateClusterOperator("kube-apiserver", "operator", v41816),
+			},
+		},
+		{
+			name:               "was updating, progressed",
+			previousCompletion: 33,
+			expectChange:       true,
+
+			mutateBaselineCV: updating15to16(anchor),
+			cos: []openshiftconfigv1.ClusterOperator{
+				instantiateClusterOperator("etcd", "operator", v41815),
+				instantiateClusterOperator("kube-apiserver", "operator", v41816),
+				instantiateClusterOperator("openshift-apiserver", "operator", v41816),
+			},
+		},
+		{
+			name:               "was updating, did not progress",
+			previousCompletion: 33,
+			expectChange:       false,
+
+			mutateBaselineCV: updating15to16(anchor),
+			cos: []openshiftconfigv1.ClusterOperator{
+				instantiateClusterOperator("etcd", "operator", v41815),
+				instantiateClusterOperator("kube-apiserver", "operator", v41815),
+				instantiateClusterOperator("openshift-apiserver", "operator", v41816),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			now := metav1.NewTime(anchor)
+			cv := &openshiftconfigv1.ClusterVersion{
+				ObjectMeta: metav1.ObjectMeta{Name: "version"},
+				Status:     openshiftconfigv1.ClusterVersionStatus{},
+			}
+			tc.mutateBaselineCV(cv)
+			previous := openshiftv1alpha1.ClusterVersionProgressInsightStatus{
+				Completion:           tc.previousCompletion,
+				LastObservedProgress: now,
+			}
+
+			var cos openshiftconfigv1.ClusterOperatorList
+			cos.Items = append(cos.Items, tc.cos...)
+			insight, _ := assessClusterVersion(cv, &previous, &cos)
+			if tc.expectChange {
+				if tc.previousCompletion == insight.Completion {
+					t.Errorf("expected Completion to change, but it did not")
+				}
+				if now == insight.LastObservedProgress {
+					t.Errorf("expected LastObservedProgress to change, but it did not")
+				}
+			} else {
+				if tc.previousCompletion != insight.Completion {
+					t.Errorf("expected Completion to remain the same, but it changed from %d to %d", tc.previousCompletion, insight.Completion)
+				}
+				if now != insight.LastObservedProgress {
+					t.Errorf("expected LastObservedProgress to remain the same, but it changed from %v to %v", now, insight.LastObservedProgress)
+				}
 			}
 		})
 	}
