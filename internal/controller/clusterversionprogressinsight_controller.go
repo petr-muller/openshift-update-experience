@@ -21,6 +21,7 @@ import (
 	"crypto/md5"
 	"encoding/base32"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -168,10 +170,54 @@ func versionsFromHistory(history []openshiftconfigv1.UpdateHistory) ouev1alpha1.
 	return versions
 }
 
-// estimateCompletion returns a time.Time that is 60 minutes after the given time. Proper estimation needs to be added
-// once the controller starts handling ClusterOperators.
-func estimateCompletion(started time.Time) time.Time {
-	return started.Add(60 * time.Minute)
+// timewiseComplete returns the estimated timewise completion given the cluster operator completion percentage
+// Typical cluster achieves 97% cluster operator completion in 67% of the time it takes to reach 100% completion
+// The function is a combination of 3 polynomial functions that approximate the curve of the completion percentage
+// The polynomes were obtained by curve fitting update progress on b01 cluster
+func timewiseComplete(coCompletion float64) float64 {
+	x := coCompletion
+	x2 := x * x
+	x3 := x * x * x
+	x4 := math.Pow(x, 4)
+	switch {
+	case coCompletion < 0.25:
+		return -0.03078788 + 2.62886*x - 3.823954*x2
+	case coCompletion < 0.9:
+		return 0.1851215 + 1.64994*x - 4.676898*x2 + 5.451824*x3 - 2.125286*x4
+	default: // >0.9
+		return 25053.32 - 107394.3*x + 172527.2*x2 - 123107*x3 + 32921.81*x4
+	}
+}
+
+func estimateCompletion(baseline, toLastObservedProgress, updatingFor time.Duration, coCompletion float64) time.Duration {
+	if coCompletion >= 1 {
+		return 0
+	}
+
+	var estimateTotalSeconds float64
+	if completion := timewiseComplete(coCompletion); coCompletion > 0 && completion > 0 && (toLastObservedProgress > 5*time.Minute) {
+		elapsedSeconds := toLastObservedProgress.Seconds()
+		estimateTotalSeconds = elapsedSeconds / completion
+	} else {
+		estimateTotalSeconds = baseline.Seconds()
+	}
+
+	remainingSeconds := estimateTotalSeconds - updatingFor.Seconds()
+	var overestimate = 1.2
+	if remainingSeconds < 0 {
+		overestimate = 1 / overestimate
+	}
+
+	// TODO: Overestimating remaining time is less effective towards the end of the update, maybe
+	// we should overestimate the total time instead of the remaining time? I think I tried that
+	// earlier and had some problems?
+	estimateTimeToComplete := time.Duration(remainingSeconds*overestimate) * time.Second
+
+	if estimateTimeToComplete > 10*time.Minute {
+		return estimateTimeToComplete.Round(time.Minute)
+	} else {
+		return estimateTimeToComplete.Round(time.Second)
+	}
 }
 
 const (
@@ -199,6 +245,21 @@ func forcedHealthInsight(cv *openshiftconfigv1.ClusterVersion, now metav1.Time) 
 			Reference: "https://issues.redhat.com/browse/OTA-1418",
 		},
 	}
+}
+
+func baselineDuration(history []openshiftconfigv1.UpdateHistory) time.Duration {
+	// First item is current update and last item is likely installation
+	if len(history) < 3 {
+		return time.Hour
+	}
+
+	for _, item := range history[1 : len(history)-1] {
+		if item.State == openshiftconfigv1.CompletedUpdate {
+			return item.CompletionTime.Sub(item.StartedTime.Time)
+		}
+	}
+
+	return time.Hour
 }
 
 // assessClusterVersion produces a ClusterVersion status insight from the current state of the ClusterVersion resource.
@@ -233,9 +294,9 @@ func assessClusterVersion(
 		}
 	}
 
-	var completion int32
+	var coCompletion float64
 	if len(cos.Items) > 0 {
-		completion = int32(float64(updatedOperators) / float64(len(cos.Items)) * 100.0)
+		coCompletion = float64(updatedOperators) / float64(len(cos.Items))
 	}
 
 	var assessment ouev1alpha1.ClusterVersionAssessment
@@ -245,7 +306,7 @@ func assessClusterVersion(
 		assessment = ouev1alpha1.ClusterVersionAssessmentProgressing
 	case metav1.ConditionFalse:
 		assessment = ouev1alpha1.ClusterVersionAssessmentCompleted
-		completion = 100
+		coCompletion = 1
 	case metav1.ConditionUnknown:
 		assessment = ouev1alpha1.ClusterVersionAssessmentUnknown
 	default:
@@ -258,13 +319,22 @@ func assessClusterVersion(
 		Name:                 cv.Name,
 		Assessment:           assessment,
 		Versions:             versionsFromHistory(cv.Status.History),
-		Completion:           completion,
+		Completion:           int32(coCompletion * 100),
 		StartedAt:            startedAt,
 		LastObservedProgress: previous.LastObservedProgress,
 	}
 
-	if completion != previous.Completion || insight.LastObservedProgress.IsZero() {
-		insight.LastObservedProgress = metav1.Now()
+	now := metav1.Now()
+	if insight.Completion != previous.Completion || insight.LastObservedProgress.IsZero() {
+		insight.LastObservedProgress = now
+	}
+
+	if coCompletion <= 1 && assessment != ouev1alpha1.ClusterVersionAssessmentCompleted {
+		historyBaseline := baselineDuration(cv.Status.History)
+		toLastObservedProgress := insight.LastObservedProgress.Sub(startedAt.Time)
+		updatingFor := now.Sub(startedAt.Time)
+		estimated := estimateCompletion(historyBaseline, toLastObservedProgress, updatingFor, coCompletion)
+		insight.EstimatedCompletedAt = ptr.To(metav1.NewTime(now.Add(estimated)))
 	}
 
 	if oldUpdating := meta.FindStatusCondition(previous.Conditions, updating.Type); oldUpdating != nil {
@@ -274,10 +344,6 @@ func assessClusterVersion(
 
 	if !completedAt.IsZero() {
 		insight.CompletedAt = &completedAt
-	}
-
-	if est := estimateCompletion(startedAt.Time); !est.IsZero() {
-		insight.EstimatedCompletedAt = &metav1.Time{Time: est}
 	}
 
 	var healthInsights []*ouev1alpha1.UpdateHealthInsightStatus

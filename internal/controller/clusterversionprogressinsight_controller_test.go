@@ -886,16 +886,53 @@ func Test_VersionsFromHistory(t *testing.T) {
 }
 
 func Test_EstimateCompletion(t *testing.T) {
-	now := time.Now()
 	testCases := []struct {
-		name     string
-		started  time.Time
-		expected time.Time
+		name                   string
+		baseline               time.Duration
+		toLastObservedProgress time.Duration
+		updatingFor            time.Duration
+		completion             float64
+
+		expected time.Duration
 	}{
 		{
-			name:     "estimate from now",
-			started:  now,
-			expected: now.Add(60 * time.Minute),
+			name:                   "estimate is zero when completed",
+			baseline:               time.Hour,
+			toLastObservedProgress: 80 * time.Minute,
+			updatingFor:            85 * time.Minute,
+			completion:             1,
+
+			expected: 0,
+		},
+		{
+			name:                   "estimate uses baseline when no progress was observed yet",
+			baseline:               70 * time.Minute,
+			toLastObservedProgress: 0,
+			updatingFor:            10 * time.Minute,
+			completion:             0,
+
+			expected: 72 * time.Minute, // 120% of 60m (70m baseline - 10m elapsed)
+		},
+		{
+			name:                   "estimate uses baseline early in the update",
+			baseline:               63 * time.Minute,
+			toLastObservedProgress: 2 * time.Minute,
+			updatingFor:            3 * time.Minute,
+			completion:             0.03, // 3% complete
+
+			expected: 72 * time.Minute, // 120% of 60m (63m baseline - 3m elapsed)
+		},
+		{
+			name:                   "estimate is projected from last observed progress",
+			baseline:               60 * time.Minute,
+			toLastObservedProgress: 40 * time.Minute,
+			updatingFor:            50 * time.Minute,
+			completion:             0.97,
+
+			// This is looks a bit arbitrary which is caused by timewiseComplete approximation
+			// 97% completed is ~69% timewise so if 97% is done in 40m, the projection is ~57m20s
+			// At 50m this means 7m20s remains, which is overestimated by 20% to ~8m45s
+			expected: 8*time.Minute + 45*time.Second,
 		},
 	}
 
@@ -903,9 +940,9 @@ func Test_EstimateCompletion(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			actual := estimateCompletion(tc.started)
-			if !actual.Equal(tc.expected) {
-				t.Errorf("expected completion %v, got %v", tc.expected, actual)
+			actual := estimateCompletion(tc.baseline, tc.toLastObservedProgress, tc.updatingFor, tc.completion)
+			if diff := cmp.Diff(tc.expected, actual); diff != "" {
+				t.Errorf("expected completion time mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
