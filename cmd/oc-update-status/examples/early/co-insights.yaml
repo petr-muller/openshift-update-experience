@@ -13,6 +13,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AuthenticatorCertKeyProgressing: All is well"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -26,6 +31,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: WaitingForProvisioningCR"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -39,6 +49,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "NodeInstaller"
       message: "Progressing=True: NodeInstallerProgressing: 2 nodes are at revision 33; 1 nodes are at revision 34"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -52,6 +67,11 @@ items:
       lastTransitionTime: "2025-06-27T12:39:47Z"
       reason: "NodeInstaller"
       message: "Progressing=True: NodeInstallerProgressing: 3 nodes are at revision 274; 0 nodes have achieved new revision 276"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T12:39:47Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -65,6 +85,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -78,6 +103,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected: All is well"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -91,6 +121,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: "
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -104,6 +139,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Updated"
       message: "Progressing=False: AsExpected: All is well"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -117,6 +157,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected: All is well"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -130,6 +175,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -143,6 +193,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected: All is well"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -156,6 +211,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected: Desired and current number of DNSes are equal"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -169,6 +229,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: Ready: Progressing: The registry is ready..."
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -182,6 +247,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected: desired and current number of IngressControllers are equal"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -195,6 +265,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected: Monitoring the cluster"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -208,6 +283,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected: NodeInstallerProgressing: 3 nodes are at revision 111"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -221,6 +301,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected: NodeInstallerProgressing: 3 nodes are at revision 85"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -234,6 +319,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected: All is well"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -247,6 +337,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -260,6 +355,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -273,6 +373,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: Cluster version is 4.14.1"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -286,6 +391,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: OperatorAvailable: Successfully progressed to release version: 4.14.1"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -299,6 +409,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: "
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -312,6 +427,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: "
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -325,6 +445,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected: Cluster version is \"4.14.1\""
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -338,6 +463,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected: All is well"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -351,6 +481,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected: All is well"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -364,6 +499,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: Samples installation successful at 4.14.1"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -377,6 +517,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: Deployed 4.14.0-202310201027.p0.gf515d1c.assembly.stream"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -390,6 +535,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: Deployed 4.14.0-202310201027.p0.gf515d1c.assembly.stream"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -403,6 +553,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: Deployed version 0.0.1-snapshot"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -416,6 +571,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected: Progressing: All service-ca-operator deployments updated"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 - apiVersion: openshift.muller.dev/v1alpha1
   kind: ClusterOperatorProgressInsight
   metadata:
@@ -429,6 +589,11 @@ items:
       lastTransitionTime: "2025-06-27T11:59:26Z"
       reason: "Pending"
       message: "Progressing=False: AsExpected: AWSEBSCSIDriverOperatorCRProgressing: All is well"
+    - type: Healthy
+      status: "True"
+      lastTransitionTime: "2025-06-27T11:59:26Z"
+      reason: "AsExpected"
+      message: "All is well"
 kind: List
 metadata:
   resourceVersion: ""

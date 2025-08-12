@@ -152,6 +152,27 @@ var (
 		Reason:  "Updated",
 		Message: "Operator went brrr",
 	}
+
+	healthyTrue = metav1.Condition{
+		Type:    string(v1alpha1.ClusterOperatorProgressInsightHealthy),
+		Status:  metav1.ConditionTrue,
+		Reason:  "AsExpected",
+		Message: "All is well",
+	}
+
+	healthyFalseUnavailable = metav1.Condition{
+		Type:    string(v1alpha1.ClusterOperatorProgressInsightHealthy),
+		Status:  metav1.ConditionFalse,
+		Reason:  "Unavailable",
+		Message: "Operator is not available",
+	}
+
+	healthyFalseDegraded = metav1.Condition{
+		Type:    string(v1alpha1.ClusterOperatorProgressInsightHealthy),
+		Status:  metav1.ConditionFalse,
+		Reason:  "Degraded",
+		Message: "Operator is degraded",
+	}
 )
 
 func TestControlPlaneStatusDisplayDataWrite_Assessment(t *testing.T) {
@@ -556,6 +577,125 @@ func TestControlPlaneStatusDisplayDataWrite_Duration(t *testing.T) {
 	}
 }
 
+func TestControlPlaneStatusDisplayDataWrite_OperatorHealth(t *testing.T) {
+	t.Parallel()
+
+	templateData := controlPlaneStatusDisplayData{
+		Assessment:        assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+		Completion:        33,
+		Duration:          42 * time.Minute,
+		EstTimeToComplete: 18 * time.Minute,
+		EstDuration:       60 * time.Minute,
+		TargetVersion: versions{
+			previous: "4.10.0",
+			target:   "4.11.0",
+		},
+	}
+
+	testCases := []struct {
+		name      string
+		operators operators
+		expected  string
+	}{
+		{
+			name:      "no operators",
+			operators: operators{Total: 0},
+			expected:  "Operator Health: 0 healthy",
+		},
+		{
+			name: "all healthy",
+			operators: operators{
+				Total: 3,
+				Healthy: []operator{
+					{Name: "test-operator-1", Condition: healthyTrue},
+					{Name: "test-operator-2", Condition: healthyTrue},
+					{Name: "test-operator-3", Condition: healthyTrue},
+				},
+			},
+			expected: "Operator Health: 3 healthy",
+		},
+		{
+			name: "some healthy",
+			operators: operators{
+				Total: 3,
+				Healthy: []operator{
+					{Name: "test-operator-1", Condition: healthyTrue},
+					{Name: "test-operator-2", Condition: healthyTrue},
+				},
+				Unavailable: []operator{
+					{Name: "test-operator-3", Condition: healthyFalseUnavailable},
+				},
+			},
+			expected: "Operator Health: 2 healthy, 1 unavailable",
+		},
+		{
+			name: "some degraded",
+			operators: operators{
+				Total: 3,
+				Healthy: []operator{
+					{Name: "test-operator-1", Condition: healthyTrue},
+					{Name: "test-operator-2", Condition: healthyTrue},
+				},
+				Degraded: []operator{
+					{Name: "test-operator-3", Condition: healthyFalseDegraded},
+				},
+			},
+			expected: "Operator Health: 2 healthy, 1 available but degraded",
+		},
+		{
+			name: "one of each",
+			operators: operators{
+				Total:       3,
+				Healthy:     []operator{{Name: "test-operator-1", Condition: healthyTrue}},
+				Unavailable: []operator{{Name: "test-operator-2", Condition: healthyFalseUnavailable}},
+				Degraded:    []operator{{Name: "test-operator-3", Condition: healthyFalseDegraded}},
+			},
+			expected: "Operator Health: 1 healthy, 1 unavailable, 1 available but degraded",
+		},
+		{
+			name: "one unknown",
+			operators: operators{
+				Total: 3,
+				Healthy: []operator{
+					{Name: "test-operator-1", Condition: healthyTrue},
+					{Name: "test-operator-2", Condition: healthyTrue},
+				},
+			},
+			expected: "Operator Health: 2 healthy, 1 unknown",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			data := templateData
+			data.Operators = tc.operators
+
+			var buf bytes.Buffer
+			if err := data.Write(&buf, false, time.Now()); err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			var healthLine string
+			for _, line := range bytes.Split(buf.Bytes(), []byte("\n")) {
+				if bytes.HasPrefix(line, []byte("Operator Health:")) {
+					healthLine = string(line)
+					break
+				}
+			}
+
+			if healthLine == "" {
+				t.Fatalf("Expected operator health line not found in output: %s", buf.String())
+			}
+
+			if diff := cmp.Diff(tc.expected, healthLine); diff != "" {
+				t.Errorf("controlPlaneStatusDisplayData.Write() mismatch (-expected +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestControlPlaneStatusDisplayDataWrite_DurationEstimate(t *testing.T) {
 	t.Parallel()
 
@@ -663,6 +803,15 @@ func TestControlPlaneStatusDisplayDataWrite(t *testing.T) {
 					Updating: []operator{
 						{Name: "test-operator-3", Condition: updatingTrue},
 					},
+					Healthy: []operator{
+						{Name: "test-operator-1", Condition: healthyTrue},
+					},
+					Unavailable: []operator{
+						{Name: "test-operator-2", Condition: healthyFalseUnavailable},
+					},
+					Degraded: []operator{
+						{Name: "test-operator-3", Condition: healthyFalseDegraded},
+					},
 				},
 				TargetVersion: versions{
 					previous: "4.10.0",
@@ -675,6 +824,7 @@ Target Version:  4.11.0 (from 4.10.0)
 Updating:        test-operator-3
 Completion:      33% (1 operators updated, 1 updating, 1 waiting)
 Duration:        36s
+Operator Health: 1 healthy, 1 unavailable, 1 available but degraded
 `,
 		},
 		{
@@ -692,6 +842,9 @@ Duration:        36s
 					Updated: []operator{
 						{Name: "test-operator", Condition: updatingFalseUpdated},
 					},
+					Healthy: []operator{
+						{Name: "test-operator", Condition: healthyTrue},
+					},
 				},
 			},
 			expected: `= Control Plane =
@@ -699,6 +852,7 @@ Assessment:      Completed
 Target Version:  4.11.0 (from 4.10.0)
 Completion:      100% (1 operators updated, 0 updating, 0 waiting)
 Duration:        56m
+Operator Health: 1 healthy
 `,
 		},
 	}
@@ -974,6 +1128,36 @@ func Test_assessControlPlaneStatus_Operators(t *testing.T) {
 				Updated:  []operator{{Name: "test-operator-1", Condition: updatingFalseUpdated}},
 				Waiting:  []operator{{Name: "test-operator-2", Condition: updatingFalsePending}},
 				Updating: []operator{{Name: "test-operator-3", Condition: updatingTrue}},
+			},
+		},
+		{
+			name: "healthy operator",
+			coInsights: []v1alpha1.ClusterOperatorProgressInsightStatus{
+				{Name: "test-operator-1", Conditions: []metav1.Condition{healthyTrue}},
+			},
+			expected: operators{
+				Total:   1,
+				Healthy: []operator{{Name: "test-operator-1", Condition: healthyTrue}},
+			},
+		},
+		{
+			name: "unavailable operator",
+			coInsights: []v1alpha1.ClusterOperatorProgressInsightStatus{
+				{Name: "test-operator-1", Conditions: []metav1.Condition{healthyFalseUnavailable}},
+			},
+			expected: operators{
+				Total:       1,
+				Unavailable: []operator{{Name: "test-operator-1", Condition: healthyFalseUnavailable}},
+			},
+		},
+		{
+			name: "degraded operator",
+			coInsights: []v1alpha1.ClusterOperatorProgressInsightStatus{
+				{Name: "test-operator-1", Conditions: []metav1.Condition{healthyFalseDegraded}},
+			},
+			expected: operators{
+				Total:    1,
+				Degraded: []operator{{Name: "test-operator-1", Condition: healthyFalseDegraded}},
 			},
 		},
 	}

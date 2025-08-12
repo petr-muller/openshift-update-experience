@@ -42,9 +42,11 @@ type operator struct {
 
 type operators struct {
 	Total int
-	// Unavailable are operators that are not available
+	// Healthy are operators that are known to be healthy (Healthy=True)
+	Healthy []operator
+	// Unavailable are operators that are not available (Healthy=False | Reason=Unavailable)
 	Unavailable []operator
-	// Degraded are operators that are available but degraded
+	// Degraded are operators that are available but degraded (Healthy=False | Reason=Degraded)
 	Degraded []operator
 	// Updated are operators that updated its version, no matter its conditions
 	Updated []operator
@@ -54,17 +56,19 @@ type operators struct {
 	Updating []operator
 }
 
-// TODO(muller): Uncomment as I add more functionality.
-// func (o operators) StatusSummary() string {
-// 	res := []string{fmt.Sprintf("%d Healthy", o.Total-o.Unavailable-o.Degraded)}
-// 	if o.Unavailable > 0 {
-// 		res = append(res, fmt.Sprintf("%d Unavailable", o.Unavailable))
-// 	}
-// 	if o.Degraded > 0 {
-// 		res = append(res, fmt.Sprintf("%d Available but degraded", o.Degraded))
-// 	}
-// 	return strings.Join(res, ", ")
-// }
+func (o operators) StatusSummary() string {
+	res := []string{fmt.Sprintf("%d healthy", len(o.Healthy))}
+	if unavailable := len(o.Unavailable); unavailable > 0 {
+		res = append(res, fmt.Sprintf("%d unavailable", unavailable))
+	}
+	if degraded := len(o.Degraded); degraded > 0 {
+		res = append(res, fmt.Sprintf("%d available but degraded", degraded))
+	}
+	if unknown := o.Total - len(o.Healthy) - len(o.Unavailable) - len(o.Degraded); unknown > 0 {
+		res = append(res, fmt.Sprintf("%d unknown", unknown))
+	}
+	return strings.Join(res, ", ")
+}
 
 type controlPlaneStatusDisplayData struct {
 	Assessment assessmentState
@@ -87,11 +91,8 @@ Updating:        {{ . }}
 {{ end -}}
 Completion:      {{ printf "%.0f" .Completion }}% ({{ len .Operators.Updated }} operators updated, {{ len .Operators.Updating }} updating, {{ len .Operators.Waiting }} waiting)
 Duration:        {{ shortDuration .Duration }}{{ if .EstTimeToComplete }} (Est. Time Remaining: {{ vagueUnder .EstTimeToComplete .EstDuration .IsMultiArchMigration }}){{ end }}
+Operator Health: {{ .Operators.StatusSummary }}
 `
-
-//nolint:lll
-// TODO(muller): Complete the template as I add more functionality.
-// Operator Health: {{ .Operators.StatusSummary }}
 
 func shortDuration(d time.Duration) string {
 	orig := d.String()
@@ -324,24 +325,37 @@ func assessControlPlaneStatus(
 	}
 
 	for _, co := range cos {
-		updating := meta.FindStatusCondition(co.Conditions, string(v1alpha1.ClusterOperatorProgressInsightUpdating))
-		if updating == nil {
-			continue
-		}
-
 		displayData.Operators.Total++
 
-		op := operator{Name: co.Name, Condition: *updating}
-		switch {
-		case updating.Status == metav1.ConditionTrue:
-			displayData.Operators.Updating = append(displayData.Operators.Updating, op)
-		case updating.Status == metav1.ConditionFalse &&
-			updating.Reason == string(v1alpha1.ClusterOperatorUpdatingReasonUpdated):
-			displayData.Operators.Updated = append(displayData.Operators.Updated, op)
-		case updating.Status == metav1.ConditionFalse &&
-			updating.Reason == string(v1alpha1.ClusterOperatorUpdatingReasonPending):
-			displayData.Operators.Waiting = append(displayData.Operators.Waiting, op)
-			// TODO(muller): Handle error cases (unknown, false with weird reasons)
+		updating := string(v1alpha1.ClusterOperatorProgressInsightUpdating)
+		if updating := meta.FindStatusCondition(co.Conditions, updating); updating != nil {
+			op := operator{Name: co.Name, Condition: *updating}
+			switch {
+			case updating.Status == metav1.ConditionTrue:
+				displayData.Operators.Updating = append(displayData.Operators.Updating, op)
+			case updating.Status == metav1.ConditionFalse &&
+				updating.Reason == string(v1alpha1.ClusterOperatorUpdatingReasonUpdated):
+				displayData.Operators.Updated = append(displayData.Operators.Updated, op)
+			case updating.Status == metav1.ConditionFalse &&
+				updating.Reason == string(v1alpha1.ClusterOperatorUpdatingReasonPending):
+				displayData.Operators.Waiting = append(displayData.Operators.Waiting, op)
+				// TODO(muller): Handle error cases (unknown, false with weird reasons)
+			}
+		}
+
+		healthy := string(v1alpha1.ClusterOperatorProgressInsightHealthy)
+		if healthy := meta.FindStatusCondition(co.Conditions, healthy); healthy != nil {
+			reasonUnavailable := string(v1alpha1.ClusterOperatorHealthyReasonUnavailable)
+			reasonDegraded := string(v1alpha1.ClusterOperatorHealthyReasonDegraded)
+			op := operator{Name: co.Name, Condition: *healthy}
+			switch {
+			case healthy.Status == metav1.ConditionTrue:
+				displayData.Operators.Healthy = append(displayData.Operators.Healthy, op)
+			case healthy.Status == metav1.ConditionFalse && healthy.Reason == reasonUnavailable:
+				displayData.Operators.Unavailable = append(displayData.Operators.Unavailable, op)
+			case healthy.Status == metav1.ConditionFalse && healthy.Reason == reasonDegraded:
+				displayData.Operators.Degraded = append(displayData.Operators.Degraded, op)
+			}
 		}
 	}
 
