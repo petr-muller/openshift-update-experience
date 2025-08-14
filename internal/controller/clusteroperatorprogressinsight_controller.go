@@ -21,6 +21,7 @@ import (
 
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
 	"github.com/petr-muller/openshift-update-experience/internal/clusteroperators"
+	"github.com/petr-muller/openshift-update-experience/internal/health"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -187,7 +188,7 @@ func (r *ClusterOperatorProgressInsightReconciler) SetupWithManager(mgr ctrl.Man
 		Owns(&ouev1alpha1.UpdateHealthInsight{},
 			builder.WithPredicates(
 				predicate.NewPredicateFuncs(func(o client.Object) bool {
-					return o.GetLabels()[LabelUpdateHealthInsightManager] == "clusteroperator"
+					return o.GetLabels()[health.InsightManagerLabel] == "clusteroperator"
 				}),
 			),
 		).
