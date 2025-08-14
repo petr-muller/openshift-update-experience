@@ -27,6 +27,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
+	"github.com/petr-muller/openshift-update-experience/internal/clusteroperators"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,16 +61,6 @@ func NewClusterVersionProgressInsightReconciler(client client.Client, scheme *ru
 		Client: client,
 		Scheme: scheme,
 	}
-}
-
-func findOperatorStatusCondition(conditions []openshiftconfigv1.ClusterOperatorStatusCondition, conditionType openshiftconfigv1.ClusterStatusConditionType) *openshiftconfigv1.ClusterOperatorStatusCondition {
-	for i := range conditions {
-		if conditions[i].Type == conditionType {
-			return &conditions[i]
-		}
-	}
-
-	return nil
 }
 
 func setCannotDetermineUpdating(cond *metav1.Condition, message string) {
@@ -275,7 +266,7 @@ func assessClusterVersion(
 	if len(cv.Status.History) > 0 {
 		lastHistoryItem = &cv.Status.History[0]
 	}
-	cvProgressing := findOperatorStatusCondition(cv.Status.Conditions, openshiftconfigv1.OperatorProgressing)
+	cvProgressing := clusteroperators.FindOperatorStatusCondition(cv.Status.Conditions, openshiftconfigv1.OperatorProgressing)
 
 	updating, startedAt, completedAt := isControlPlaneUpdating(cvProgressing, lastHistoryItem)
 
@@ -285,7 +276,7 @@ func assessClusterVersion(
 	var updatedOperators int32
 	for _, co := range cos.Items {
 		for i := range co.Status.Versions {
-			if co.Status.Versions[i].Name == operatorVersionName {
+			if co.Status.Versions[i].Name == clusteroperators.OperatorVersionName {
 				if co.Status.Versions[i].Version == cvTargetVersion {
 					updatedOperators++
 				}
@@ -373,7 +364,7 @@ func nameForHealthInsight(prefix string, healthInsight *ouev1alpha1.UpdateHealth
 
 func (r *ClusterVersionProgressInsightReconciler) reconcileHealthInsights(ctx context.Context, cvProgressInsight *ouev1alpha1.ClusterVersionProgressInsight, healthInsights []*ouev1alpha1.UpdateHealthInsightStatus) error {
 	var clusterInsights ouev1alpha1.UpdateHealthInsightList
-	if err := r.List(ctx, &clusterInsights, client.MatchingLabels{labelUpdateHealthInsightManager: "clusterversion"}); err != nil {
+	if err := r.List(ctx, &clusterInsights, client.MatchingLabels{LabelUpdateHealthInsightManager: "clusterversion"}); err != nil {
 		klog.ErrorS(err, "Failed to list existing UpdateHealthInsights")
 		return err
 	}
@@ -401,7 +392,7 @@ func (r *ClusterVersionProgressInsightReconciler) reconcileHealthInsights(ctx co
 		healthInsight := &ouev1alpha1.UpdateHealthInsight{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   insight,
-				Labels: map[string]string{labelUpdateHealthInsightManager: "clusterversion"},
+				Labels: map[string]string{LabelUpdateHealthInsightManager: "clusterversion"},
 			},
 			Status: *ourInsightsByName[insight],
 		}
@@ -537,15 +528,8 @@ func (r *ClusterVersionProgressInsightReconciler) Reconcile(ctx context.Context,
 }
 
 const (
-	labelUpdateHealthInsightManager = "oue.openshift.muller.dev/update-health-insight-manager"
-	controllerName                  = "clusterversionprogressinsight"
+	controllerName = "clusterversionprogressinsight"
 )
-
-func predicateForHealthInsightsManagedBy(controller string) predicate.Funcs {
-	return predicate.NewPredicateFuncs(func(o client.Object) bool {
-		return o.GetLabels()[labelUpdateHealthInsightManager] == controller
-	})
-}
 
 var healthInsightsManagedByClusterVersionProgressInsight = predicateForHealthInsightsManagedBy(controllerName)
 

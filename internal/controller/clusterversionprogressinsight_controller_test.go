@@ -497,12 +497,12 @@ func Test_UpdateHealthInsightPredicate(t *testing.T) {
 		},
 		{
 			name:     "UpdateHealthInsight with not our manager label",
-			labels:   map[string]string{labelUpdateHealthInsightManager: "other-manager"},
+			labels:   map[string]string{LabelUpdateHealthInsightManager: "other-manager"},
 			expected: false,
 		},
 		{
 			name:     "UpdateHealthInsight with our manager label",
-			labels:   map[string]string{labelUpdateHealthInsightManager: "clusterversionprogressinsight"},
+			labels:   map[string]string{LabelUpdateHealthInsightManager: "clusterversionprogressinsight"},
 			expected: true,
 		},
 	}
