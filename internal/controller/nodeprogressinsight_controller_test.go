@@ -22,6 +22,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/petr-muller/openshift-update-experience/internal/controller/nodes"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -79,7 +80,7 @@ var _ = Describe("NodeProgressInsight Controller", Serial, func() {
 				controllerReconciler := &NodeProgressInsightReconciler{
 					Client: k8sClient,
 					Scheme: k8sClient.Scheme(),
-					now:    metav1.Now,
+					impl:   nodes.NewReconciler(k8sClient, k8sClient.Scheme()),
 				}
 
 				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
