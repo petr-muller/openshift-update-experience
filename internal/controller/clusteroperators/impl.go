@@ -175,16 +175,16 @@ func assessClusterOperator(_ context.Context, operator *openshiftconfigv1.Cluste
 		}
 	}
 
-	// var available *openshiftconfigv1.ClusterOperatorStatusCondition
-	// var degraded *openshiftconfigv1.ClusterOperatorStatusCondition
+	var available *openshiftconfigv1.ClusterOperatorStatusCondition
+	var degraded *openshiftconfigv1.ClusterOperatorStatusCondition
 	var progressing *openshiftconfigv1.ClusterOperatorStatusCondition
 
 	for _, condition := range operator.Status.Conditions {
 		switch condition.Type {
-		// case openshiftconfigv1.OperatorAvailable:
-		// 	available = &condition
-		// case openshiftconfigv1.OperatorDegraded:
-		// 	degraded = &condition
+		case openshiftconfigv1.OperatorAvailable:
+			available = &condition
+		case openshiftconfigv1.OperatorDegraded:
+			degraded = &condition
 		case openshiftconfigv1.OperatorProgressing:
 			progressing = &condition
 		}
@@ -212,30 +212,29 @@ func assessClusterOperator(_ context.Context, operator *openshiftconfigv1.Cluste
 		}
 	}
 
-	// health := metav1.Condition{
-	// 	Type:               string(ouev1alpha1.ClusterOperatorProgressInsightHealthy),
-	// 	Status:             metav1.ConditionTrue,
-	// 	Reason:             string(ouev1alpha1.ClusterOperatorHealthyReasonAsExpected),
-	// 	LastTransitionTime: now,
-	// }
+	health := metav1.Condition{
+		Type:               string(ouev1alpha1.ClusterOperatorProgressInsightHealthy),
+		Status:             metav1.ConditionTrue,
+		Reason:             string(ouev1alpha1.ClusterOperatorHealthyReasonAsExpected),
+		LastTransitionTime: now,
+	}
 
-	// if available == nil {
-	// 	health.Status = metav1.ConditionUnknown
-	// 	health.Reason = string(ouev1alpha1.ClusterOperatorHealthyReasonUnavailable)
-	// 	health.Message = "The cluster operator is unavailable because the available condition is not found in the cluster operator's status"
-	// } else if available.Status != openshiftconfigv1.ConditionTrue {
-	// 	health.Status = metav1.ConditionFalse
-	// 	health.Reason = string(ouev1alpha1.ClusterOperatorHealthyReasonUnavailable)
-	// 	health.Message = available.Message
-	// } else if degraded != nil && degraded.Status == openshiftconfigv1.ConditionTrue {
-	// 	health.Status = metav1.ConditionFalse
-	// 	health.Reason = string(ouev1alpha1.ClusterOperatorHealthyReasonDegraded)
-	// 	health.Message = degraded.Message
-	// }
+	if available == nil {
+		health.Status = metav1.ConditionUnknown
+		health.Reason = string(ouev1alpha1.ClusterOperatorHealthyReasonUnavailable)
+		health.Message = "The cluster operator is unavailable because the available condition is not found in the cluster operator's status"
+	} else if available.Status != openshiftconfigv1.ConditionTrue {
+		health.Status = metav1.ConditionFalse
+		health.Reason = string(ouev1alpha1.ClusterOperatorHealthyReasonUnavailable)
+		health.Message = available.Message
+	} else if degraded != nil && degraded.Status == openshiftconfigv1.ConditionTrue {
+		health.Status = metav1.ConditionFalse
+		health.Reason = string(ouev1alpha1.ClusterOperatorHealthyReasonDegraded)
+		health.Message = degraded.Message
+	}
 
 	return &ouev1alpha1.ClusterOperatorProgressInsightStatus{
-		Name: operator.Name,
-		// Conditions: []metav1.Condition{updating, health},
-		Conditions: []metav1.Condition{updating},
+		Name:       operator.Name,
+		Conditions: []metav1.Condition{updating, health},
 	}
 }

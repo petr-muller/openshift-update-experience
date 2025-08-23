@@ -14,6 +14,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+var ignoreLastTransitionTime = cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime")
+
 type a struct {
 	metav1.Time
 }
@@ -24,6 +26,133 @@ func anchor() a {
 
 func (n a) minutesAgo(minutes int) metav1.Time {
 	return metav1.NewTime(n.Add(-time.Duration(minutes) * time.Minute))
+}
+
+func Test_assessClusterOperator_Conditions_Healthy(t *testing.T) {
+	now := anchor()
+
+	testCases := []struct {
+		name        string
+		coAvailable *openshiftconfigv1.ClusterOperatorStatusCondition
+		coDegraded  *openshiftconfigv1.ClusterOperatorStatusCondition
+
+		expected metav1.Condition
+	}{
+		{
+			name: "Healthy=True when Available=True and Degraded=False",
+			coAvailable: &openshiftconfigv1.ClusterOperatorStatusCondition{
+				Type:               openshiftconfigv1.OperatorAvailable,
+				Status:             openshiftconfigv1.ConditionTrue,
+				Reason:             "AsExpected",
+				Message:            "All is well",
+				LastTransitionTime: now.minutesAgo(15),
+			},
+			coDegraded: &openshiftconfigv1.ClusterOperatorStatusCondition{
+				Type:               openshiftconfigv1.OperatorDegraded,
+				Status:             openshiftconfigv1.ConditionFalse,
+				Reason:             "AsExpected",
+				Message:            "All is well",
+				LastTransitionTime: now.minutesAgo(20),
+			},
+			expected: metav1.Condition{
+				Type:    "Healthy",
+				Status:  metav1.ConditionTrue,
+				Reason:  "AsExpected",
+				Message: "",
+			},
+		},
+		{
+			name: "Healthy=False|Reason=Unavailable when Available=False",
+			coAvailable: &openshiftconfigv1.ClusterOperatorStatusCondition{
+				Type:    openshiftconfigv1.OperatorAvailable,
+				Status:  openshiftconfigv1.ConditionFalse,
+				Reason:  "Broken",
+				Message: "The operator is not available",
+			},
+			coDegraded: &openshiftconfigv1.ClusterOperatorStatusCondition{
+				Type:    openshiftconfigv1.OperatorDegraded,
+				Status:  openshiftconfigv1.ConditionFalse,
+				Reason:  "AsExpected",
+				Message: "All is well",
+			},
+			expected: metav1.Condition{
+				Type:    "Healthy",
+				Status:  metav1.ConditionFalse,
+				Reason:  "Unavailable",
+				Message: "The operator is not available",
+			},
+		},
+		{
+			name: "Healthy=False|Reason=Unavailable when Available=False even when Degraded=True",
+			coAvailable: &openshiftconfigv1.ClusterOperatorStatusCondition{
+				Type:    openshiftconfigv1.OperatorAvailable,
+				Status:  openshiftconfigv1.ConditionFalse,
+				Reason:  "Broken",
+				Message: "The operator is not available",
+			},
+			coDegraded: &openshiftconfigv1.ClusterOperatorStatusCondition{
+				Type:    openshiftconfigv1.OperatorDegraded,
+				Status:  openshiftconfigv1.ConditionTrue,
+				Reason:  "AlsoBroken",
+				Message: "The operator is also degraded",
+			},
+			expected: metav1.Condition{
+				Type:    "Healthy",
+				Status:  metav1.ConditionFalse,
+				Reason:  "Unavailable",
+				Message: "The operator is not available",
+			},
+		},
+		{
+			name: "Healthy=False|Reason=Degraded when Available=True and Degraded=True",
+			coAvailable: &openshiftconfigv1.ClusterOperatorStatusCondition{
+				Type:    openshiftconfigv1.OperatorAvailable,
+				Status:  openshiftconfigv1.ConditionTrue,
+				Reason:  "AsExpected",
+				Message: "All is well",
+			},
+			coDegraded: &openshiftconfigv1.ClusterOperatorStatusCondition{
+				Type:    openshiftconfigv1.OperatorDegraded,
+				Status:  openshiftconfigv1.ConditionTrue,
+				Reason:  "Broken",
+				Message: "The operator is degraded",
+			},
+			expected: metav1.Condition{
+				Type:    "Healthy",
+				Status:  metav1.ConditionFalse,
+				Reason:  "Degraded",
+				Message: "The operator is degraded",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		co := &openshiftconfigv1.ClusterOperator{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-operator"},
+			Status: openshiftconfigv1.ClusterOperatorStatus{
+				Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{},
+				Versions: []openshiftconfigv1.OperandVersion{
+					{Name: "operator", Version: "4.15.0"},
+				},
+			},
+		}
+		if tc.coAvailable != nil {
+			co.Status.Conditions = append(co.Status.Conditions, *tc.coAvailable)
+		}
+		if tc.coDegraded != nil {
+			co.Status.Conditions = append(co.Status.Conditions, *tc.coDegraded)
+		}
+
+		insight := assessClusterOperator(context.Background(), co, "4.15.0", nil, now.Time)
+		healthy := meta.FindStatusCondition(insight.Conditions, string(openshiftv1alpha1.ClusterOperatorProgressInsightHealthy))
+		if healthy == nil {
+			t.Fatal("assessClusterOperator() did not return expected Healthy condition")
+		}
+
+		if diff := cmp.Diff(tc.expected, *healthy, ignoreLastTransitionTime); diff != "" {
+			t.Errorf("assessClusterOperator() mismatch (-want +got):\n%s", diff)
+		}
+	}
 }
 
 func Test_assessClusterOperator_Conditions_Updating(t *testing.T) {
