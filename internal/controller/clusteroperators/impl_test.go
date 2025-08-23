@@ -10,48 +10,40 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
 	openshiftv1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func Test_assessClusterOperator(t *testing.T) {
-	now := metav1.Now()
+type a struct {
+	metav1.Time
+}
 
-	var minutesAgo [60]metav1.Time
-	for i := 0; i < 60; i++ {
-		minutesAgo[i] = metav1.Time{Time: now.Add(-time.Duration(i) * time.Minute)}
-	}
+func anchor() a {
+	return a{metav1.Now()}
+}
+
+func (n a) minutesAgo(minutes int) metav1.Time {
+	return metav1.NewTime(n.Add(-time.Duration(minutes) * time.Minute))
+}
+
+func Test_assessClusterOperator_Conditions_Updating(t *testing.T) {
+	now := anchor()
 
 	var (
-		coProgressingFalse415 = openshiftconfigv1.ClusterOperatorStatusCondition{
+		coProgressingFalse = openshiftconfigv1.ClusterOperatorStatusCondition{
 			Type:               openshiftconfigv1.OperatorProgressing,
 			Status:             openshiftconfigv1.ConditionFalse,
 			Reason:             "AsExpected",
 			Message:            "All is well",
-			LastTransitionTime: minutesAgo[45],
+			LastTransitionTime: now.minutesAgo(15),
 		}
 
-		coProgressingTrue415 = openshiftconfigv1.ClusterOperatorStatusCondition{
+		coProgressingTrue = openshiftconfigv1.ClusterOperatorStatusCondition{
 			Type:               openshiftconfigv1.OperatorProgressing,
 			Status:             openshiftconfigv1.ConditionTrue,
 			Reason:             "ChuggingAlong",
 			Message:            "Deploying Deployments and exorcising DaemonSets",
-			LastTransitionTime: minutesAgo[45],
-		}
-
-		coProgressingTrue416 = openshiftconfigv1.ClusterOperatorStatusCondition{
-			Type:               openshiftconfigv1.OperatorProgressing,
-			Status:             openshiftconfigv1.ConditionTrue,
-			Reason:             "ChuggingAlong",
-			Message:            "Deploying Deployments and exorcising DaemonSets for 4.16.0",
-			LastTransitionTime: minutesAgo[45],
-		}
-
-		coProgressingFalse416 = openshiftconfigv1.ClusterOperatorStatusCondition{
-			Type:               openshiftconfigv1.OperatorProgressing,
-			Status:             openshiftconfigv1.ConditionFalse,
-			Reason:             "AsExpected",
-			Message:            "All is well on 4.16.0",
-			LastTransitionTime: minutesAgo[30],
+			LastTransitionTime: now.minutesAgo(20),
 		}
 	)
 
@@ -60,144 +52,114 @@ func Test_assessClusterOperator(t *testing.T) {
 		operator openshiftconfigv1.ClusterOperatorStatus
 		version  string
 
-		expected *openshiftv1alpha1.ClusterOperatorProgressInsightStatus
+		expected metav1.Condition
 	}{
 		{
 			name: "ClusterOperator is Updating=False|Reason=Completed before the update",
 			operator: openshiftconfigv1.ClusterOperatorStatus{
 				Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
-					coProgressingFalse415,
+					coProgressingFalse,
 				},
 				Versions: []openshiftconfigv1.OperandVersion{
 					{Name: "operator", Version: "4.15.0"},
 				},
 			},
 			version: "4.15.0",
-			expected: &openshiftv1alpha1.ClusterOperatorProgressInsightStatus{
-				Name: "test-operator",
-				Conditions: []metav1.Condition{
-					{
-						Type:    string(openshiftv1alpha1.ClusterOperatorProgressInsightUpdating),
-						Status:  metav1.ConditionFalse,
-						Reason:  string(openshiftv1alpha1.ClusterOperatorUpdatingReasonUpdated),
-						Message: fmt.Sprintf("Progressing=False: %s", coProgressingFalse415.Message),
-					},
-				},
+			expected: metav1.Condition{
+				Type:    string(openshiftv1alpha1.ClusterOperatorProgressInsightUpdating),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(openshiftv1alpha1.ClusterOperatorUpdatingReasonUpdated),
+				Message: fmt.Sprintf("Progressing=False: %s", coProgressingFalse.Message),
 			},
 		},
 		{
 			name: "ClusterOperator is Updating=False|Reason=Completed before the update even when Progressing=True",
 			operator: openshiftconfigv1.ClusterOperatorStatus{
 				Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
-					coProgressingTrue415,
+					coProgressingTrue,
 				},
 				Versions: []openshiftconfigv1.OperandVersion{
 					{Name: "operator", Version: "4.15.0"},
 				},
 			},
 			version: "4.15.0",
-			expected: &openshiftv1alpha1.ClusterOperatorProgressInsightStatus{
-				Name: "test-operator",
-				Conditions: []metav1.Condition{
-					{
-						Type:    string(openshiftv1alpha1.ClusterOperatorProgressInsightUpdating),
-						Status:  metav1.ConditionFalse,
-						Reason:  string(openshiftv1alpha1.ClusterOperatorUpdatingReasonUpdated),
-						Message: fmt.Sprintf("Progressing=True: %s", coProgressingTrue415.Message),
-					},
-				},
+			expected: metav1.Condition{
+				Type:    string(openshiftv1alpha1.ClusterOperatorProgressInsightUpdating),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(openshiftv1alpha1.ClusterOperatorUpdatingReasonUpdated),
+				Message: fmt.Sprintf("Progressing=True: %s", coProgressingTrue.Message),
 			},
 		},
 		{
 			name: "ClusterOperator is Updating=False|Reason=Pending after update started",
 			operator: openshiftconfigv1.ClusterOperatorStatus{
 				Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
-					coProgressingFalse415,
+					coProgressingFalse,
 				},
 				Versions: []openshiftconfigv1.OperandVersion{
 					{Name: "operator", Version: "4.15.0"},
 				},
 			},
 			version: "4.16.0",
-			expected: &openshiftv1alpha1.ClusterOperatorProgressInsightStatus{
-				Name: "test-operator",
-				Conditions: []metav1.Condition{
-					{
-						Type:    string(openshiftv1alpha1.ClusterOperatorProgressInsightUpdating),
-						Status:  metav1.ConditionFalse,
-						Reason:  string(openshiftv1alpha1.ClusterOperatorUpdatingReasonPending),
-						Message: fmt.Sprintf("Progressing=False: %s", coProgressingFalse415.Message),
-					},
-				},
+			expected: metav1.Condition{
+				Type:    string(openshiftv1alpha1.ClusterOperatorProgressInsightUpdating),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(openshiftv1alpha1.ClusterOperatorUpdatingReasonPending),
+				Message: fmt.Sprintf("Progressing=False: %s", coProgressingFalse.Message),
 			},
 		},
 		{
 			name: "ClusterOperator is Updating=True|Reason=Progressing after update started, progressing, old version",
 			operator: openshiftconfigv1.ClusterOperatorStatus{
 				Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
-					coProgressingTrue416,
+					coProgressingTrue,
 				},
 				Versions: []openshiftconfigv1.OperandVersion{
 					{Name: "operator", Version: "4.15.0"},
 				},
 			},
 			version: "4.16.0",
-			expected: &openshiftv1alpha1.ClusterOperatorProgressInsightStatus{
-				Name: "test-operator",
-				Conditions: []metav1.Condition{
-					{
-						Type:    string(openshiftv1alpha1.ClusterOperatorProgressInsightUpdating),
-						Status:  metav1.ConditionTrue,
-						Reason:  string(openshiftv1alpha1.ClusterOperatorUpdatingReasonProgressing),
-						Message: fmt.Sprintf("Progressing=True: %s", coProgressingTrue416.Message),
-					},
-				},
+			expected: metav1.Condition{
+				Type:    string(openshiftv1alpha1.ClusterOperatorProgressInsightUpdating),
+				Status:  metav1.ConditionTrue,
+				Reason:  string(openshiftv1alpha1.ClusterOperatorUpdatingReasonProgressing),
+				Message: fmt.Sprintf("Progressing=True: %s", coProgressingTrue.Message),
 			},
 		},
 		{
 			name: "ClusterOperator is Updating=False|Reason=Updated after update started, progressing, new version",
 			operator: openshiftconfigv1.ClusterOperatorStatus{
 				Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
-					coProgressingTrue416,
+					coProgressingTrue,
 				},
 				Versions: []openshiftconfigv1.OperandVersion{
 					{Name: "operator", Version: "4.16.0"},
 				},
 			},
 			version: "4.16.0",
-			expected: &openshiftv1alpha1.ClusterOperatorProgressInsightStatus{
-				Name: "test-operator",
-				Conditions: []metav1.Condition{
-					{
-						Type:    string(openshiftv1alpha1.ClusterOperatorProgressInsightUpdating),
-						Status:  metav1.ConditionFalse,
-						Reason:  string(openshiftv1alpha1.ClusterOperatorUpdatingReasonUpdated),
-						Message: fmt.Sprintf("Progressing=True: %s", coProgressingTrue416.Message),
-					},
-				},
+			expected: metav1.Condition{
+				Type:    string(openshiftv1alpha1.ClusterOperatorProgressInsightUpdating),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(openshiftv1alpha1.ClusterOperatorUpdatingReasonUpdated),
+				Message: fmt.Sprintf("Progressing=True: %s", coProgressingTrue.Message),
 			},
 		},
 		{
 			name: "ClusterOperator is Updating=False|Reason=Updated after update started, not progressing, new version",
 			operator: openshiftconfigv1.ClusterOperatorStatus{
 				Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
-					coProgressingFalse416,
+					coProgressingFalse,
 				},
 				Versions: []openshiftconfigv1.OperandVersion{
 					{Name: "operator", Version: "4.16.0"},
 				},
 			},
 			version: "4.16.0",
-			expected: &openshiftv1alpha1.ClusterOperatorProgressInsightStatus{
-				Name: "test-operator",
-				Conditions: []metav1.Condition{
-					{
-						Type:    string(openshiftv1alpha1.ClusterOperatorProgressInsightUpdating),
-						Status:  metav1.ConditionFalse,
-						Reason:  string(openshiftv1alpha1.ClusterOperatorUpdatingReasonUpdated),
-						Message: fmt.Sprintf("Progressing=False: %s", coProgressingFalse416.Message),
-					},
-				},
+			expected: metav1.Condition{
+				Type:    string(openshiftv1alpha1.ClusterOperatorProgressInsightUpdating),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(openshiftv1alpha1.ClusterOperatorUpdatingReasonUpdated),
+				Message: fmt.Sprintf("Progressing=False: %s", coProgressingFalse.Message),
 			},
 		},
 	}
@@ -213,8 +175,14 @@ func Test_assessClusterOperator(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "test-operator"},
 				Status:     tc.operator,
 			}
-			result := assessClusterOperator(context.Background(), co, tc.version, nil, now)
-			if diff := cmp.Diff(tc.expected, result, ignoreLastTransitionTime); diff != "" {
+
+			insight := assessClusterOperator(context.Background(), co, tc.version, nil, now.Time)
+			updating := meta.FindStatusCondition(insight.Conditions, string(openshiftv1alpha1.ClusterOperatorProgressInsightUpdating))
+			if updating == nil {
+				t.Fatal("assessClusterOperator() did not return expected Updating condition")
+			}
+
+			if diff := cmp.Diff(tc.expected, *updating, ignoreLastTransitionTime); diff != "" {
 				t.Errorf("assessClusterOperator() mismatch (-want +got):\n%s", diff)
 			}
 		})
