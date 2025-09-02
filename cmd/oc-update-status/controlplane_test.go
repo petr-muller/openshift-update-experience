@@ -378,6 +378,111 @@ func TestControlPlaneStatusDisplayDataWrite_UpdatingOperators(t *testing.T) {
 	}
 }
 
+func TestControlPlaneStatusDisplayDataWrite_UpdatingOperatorsTable(t *testing.T) {
+	t.Parallel()
+
+	now := metav1.Now()
+
+	to1Updating := *updatingTrue.DeepCopy()
+	to1Updating.LastTransitionTime = metav1.NewTime(now.Add(-5*time.Minute - 15*time.Second))
+	to2Updating := *updatingTrue.DeepCopy()
+	to2Updating.LastTransitionTime = metav1.NewTime(now.Add(-10*time.Minute - 30*time.Second))
+	to3Updating := *updatingTrue.DeepCopy()
+	to3Updating.LastTransitionTime = metav1.NewTime(now.Add(-15*time.Minute - 45*time.Second))
+
+	templateData := controlPlaneStatusDisplayData{
+		Assessment: assessmentState(v1alpha1.ClusterVersionAssessmentProgressing),
+		Completion: 33,
+		Duration:   36 * time.Second,
+		Operators: operators{
+			Total:   3,
+			Updated: []operator{{Name: "test-operator-1", Condition: updatingFalseUpdated}},
+			Waiting: []operator{{Name: "test-operator-2", Condition: updatingFalsePending}},
+		},
+		TargetVersion: versions{
+			previous: "4.10.0",
+			target:   "4.11.0",
+		},
+	}
+
+	testCases := []struct {
+		name              string
+		updatingOperators []operator
+		expectLines       []string
+	}{
+		{
+			name:              "no updating operators",
+			updatingOperators: nil,
+		},
+		{
+			name: "single updating operator",
+			updatingOperators: []operator{
+				{Name: "test-operator-1", Condition: to1Updating},
+			},
+			expectLines: []string{
+				"NAME              SINCE   REASON             MESSAGE",
+				"test-operator-1   5m15s   OperatorGoesBrrr   Operator goes brrr",
+			},
+		},
+		{
+			name: "multiple updating operators",
+			updatingOperators: []operator{
+				{Name: "test-operator-1", Condition: to1Updating},
+				{Name: "test-operator-2", Condition: to2Updating},
+				{Name: "test-operator-3", Condition: to3Updating},
+			},
+			expectLines: []string{
+				"NAME              SINCE    REASON             MESSAGE",
+				"test-operator-1   5m15s    OperatorGoesBrrr   Operator goes brrr",
+				"test-operator-2   10m30s   OperatorGoesBrrr   Operator goes brrr",
+				"test-operator-3   15m45s   OperatorGoesBrrr   Operator goes brrr",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			data := templateData
+			data.Operators.Updating = tc.updatingOperators
+
+			var buf bytes.Buffer
+			if err := data.Write(&buf, false, now.Time); err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			output := buf.String()
+			if hasOperatorsSection := strings.Contains(output, "Updating Cluster Operators"); hasOperatorsSection {
+				t.Errorf("Should not have Updating Cluster Operators section with detailed=false:\n%s", output)
+			}
+
+			buf.Reset()
+			if err := data.Write(&buf, true, now.Time); err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			output = buf.String()
+			expectOperatorsSection := len(tc.updatingOperators) > 0
+			hasOperatorsSection := strings.Contains(output, "Updating Cluster Operators")
+
+			if expectOperatorsSection != hasOperatorsSection {
+				t.Errorf("Expected Updating Cluster Operators section presence: %v, got: %v\n%s", expectOperatorsSection, hasOperatorsSection, output)
+			}
+
+			if expectOperatorsSection {
+				expectedOperatorSection := strings.Join(append([]string{
+					"Updating Cluster Operators",
+				}, tc.expectLines...), "\n")
+
+				if !strings.Contains(output, expectedOperatorSection) {
+					t.Errorf("Expected operator section:\n%s\nGot output:\n%s", expectedOperatorSection, output)
+				}
+			}
+		})
+	}
+}
+
 func TestControlPlaneStatusDisplayDataWrite_Completion(t *testing.T) {
 	t.Parallel()
 

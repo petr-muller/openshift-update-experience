@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"text/tabwriter"
 	"text/template"
 	"time"
 
@@ -148,7 +149,7 @@ var controlPlaneStatusTemplate = template.Must(
 		}).
 		Parse(controlPlaneStatusTemplateRaw))
 
-func (d *controlPlaneStatusDisplayData) Write(f io.Writer, _ bool, _ time.Time) error {
+func (d *controlPlaneStatusDisplayData) Write(f io.Writer, detailed bool, now time.Time) error {
 	//nolint:lll
 	// TODO(muller): Uncomment as I add more functionality.
 	// if d.Operators.Updated == d.Operators.Total {
@@ -159,25 +160,24 @@ func (d *controlPlaneStatusDisplayData) Write(f io.Writer, _ bool, _ time.Time) 
 		return err
 	}
 
-	// TODO(muller): Uncomment as I add more functionality.
-	// if detailed && len(d.Operators.Updating) > 0 {
-	// 	table := tabwriter.NewWriter(f, 0, 0, 3, ' ', 0)
-	// 	f.Write([]byte("\nUpdating Cluster Operators"))
-	// 	_, _ = table.Write([]byte("\nNAME\tSINCE\tREASON\tMESSAGE\n"))
-	// 	for _, o := range d.Operators.Updating {
-	// 		reason := o.Condition.Reason
-	// 		if reason == "" {
-	// 			reason = "-"
-	// 		}
-	// 		_, _ = table.Write([]byte(o.Name + "\t"))
-	// 		_, _ = table.Write([]byte(shortDuration(now.Sub(o.Condition.LastTransitionTime.Time)) + "\t"))
-	// 		_, _ = table.Write([]byte(reason + "\t"))
-	// 		_, _ = table.Write([]byte(o.Condition.Message + "\n"))
-	// 	}
-	// 	if err := table.Flush(); err != nil {
-	// 		return err
-	// 	}
-	// }
+	if detailed && len(d.Operators.Updating) > 0 {
+		table := tabwriter.NewWriter(f, 0, 0, 3, ' ', 0)
+		f.Write([]byte("\nUpdating Cluster Operators"))
+		_, _ = table.Write([]byte("\nNAME\tSINCE\tREASON\tMESSAGE\n"))
+		for _, o := range d.Operators.Updating {
+			reason := o.Condition.Reason
+			if reason == "" {
+				reason = "-"
+			}
+			_, _ = table.Write([]byte(o.Name + "\t"))
+			_, _ = table.Write([]byte(shortDuration(now.Sub(o.Condition.LastTransitionTime.Time)) + "\t"))
+			_, _ = table.Write([]byte(reason + "\t"))
+			_, _ = table.Write([]byte(o.Condition.Message + "\n"))
+		}
+		if err := table.Flush(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
