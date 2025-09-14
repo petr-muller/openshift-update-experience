@@ -467,7 +467,12 @@ func TestControlPlaneStatusDisplayDataWrite_UpdatingOperatorsTable(t *testing.T)
 			hasOperatorsSection := strings.Contains(output, "Updating Cluster Operators")
 
 			if expectOperatorsSection != hasOperatorsSection {
-				t.Errorf("Expected Updating Cluster Operators section presence: %v, got: %v\n%s", expectOperatorsSection, hasOperatorsSection, output)
+				t.Errorf(
+					"Expected Updating Cluster Operators section presence: %v, got: %v\n%s",
+					expectOperatorsSection,
+					hasOperatorsSection,
+					output,
+				)
 			}
 
 			if expectOperatorsSection {
