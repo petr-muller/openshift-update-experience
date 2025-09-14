@@ -106,6 +106,7 @@ type NodeProgressInsightStatus struct {
 	// +optional
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Format=duration
+	// TODO(muller): This should not be a duration, durations suck in controllers because they need to be updated all the time
 	EstimatedToComplete *metav1.Duration `json:"estimatedToComplete,omitempty"`
 
 	// message is a short human-readable message about the node update status. It must be shorter than 100 characters.

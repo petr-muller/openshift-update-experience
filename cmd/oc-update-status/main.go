@@ -68,6 +68,8 @@ const (
 	detailedOutputNodes     = "nodes"
 	detailedOutputHealth    = "health"
 	detailedOutputOperators = "operators"
+
+	defaultNodesShown = 10
 )
 
 var detailedOutputAllValues = []string{
@@ -127,17 +129,17 @@ func (o *options) ClusterOperatorProgressInsights(ctx context.Context) (
 	return coInsights, err
 }
 
-// TODO(muller): Enable as I am adding functionality to the plugin.
-// func (o *options) NodeProgressInsights(ctx context.Context) (ouev1alpha1.NodeProgressInsightList, error) {
-// 	if o.mockData.path != "" {
-// 		return o.mockData.nodeInsights, nil
-// 	}
-//
-// 	var nodeInsights ouev1alpha1.NodeProgressInsightList
-// 	err := o.client.List(ctx, &nodeInsights)
-// 	return nodeInsights, err
-// }
+func (o *options) NodeProgressInsights(ctx context.Context) (ouev1alpha1.NodeProgressInsightList, error) {
+	if o.mockData.path != "" {
+		return o.mockData.nodeInsights, nil
+	}
 
+	var nodeInsights ouev1alpha1.NodeProgressInsightList
+	err := o.client.List(ctx, &nodeInsights)
+	return nodeInsights, err
+}
+
+// TODO(muller): Enable as I am adding functionality to the plugin.
 // func (o *options) UpdateHealthInsights(ctx context.Context) (ouev1alpha1.UpdateHealthInsight, error) {
 // 	if o.mockData.path != "" {
 // 		return o.mockData.healthInsights, nil
@@ -194,12 +196,20 @@ func (o *options) Run(ctx context.Context) error {
 		cos = append(cos, coInsights.Items[i].Status)
 	}
 
-	// TODO(muller): Enable as I am adding functionality to the plugin.
-	// nodeInsights, err := o.NodeProgressInsights(ctx)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to get Node insights: %w", err)
-	// }
+	nodeInsights, err := o.NodeProgressInsights(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get Node insights: %w", err)
+	}
 
+	nodeInsightsByPool := map[string][]ouev1alpha1.NodeProgressInsight{}
+	for _, insight := range nodeInsights.Items {
+		pool := insight.Status.PoolResource.Name
+		nodeInsightsByPool[pool] = append(nodeInsightsByPool[pool], insight)
+	}
+
+	controlPlanePoolStatusData := assessPool("master", nodeInsightsByPool["master"])
+
+	// TODO(muller): Enable as I am adding functionality to the plugin.
 	// healthInsights, err := o.UpdateHealthInsights(ctx)
 	// if err != nil {
 	// 	return fmt.Errorf("failed to get UpdateHealth insights: %w", err)
@@ -207,6 +217,7 @@ func (o *options) Run(ctx context.Context) error {
 
 	controlPlaneStatusData := assessControlPlaneStatus(&cvInsight.Status, cos, now)
 	_ = controlPlaneStatusData.Write(o.Out, o.enabledDetailed(detailedOutputOperators), now)
+	controlPlanePoolStatusData.WriteNodes(o.Out, o.enabledDetailed(detailedOutputNodes), defaultNodesShown)
 
 	return nil
 }

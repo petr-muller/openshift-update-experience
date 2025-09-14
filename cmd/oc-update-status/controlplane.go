@@ -162,7 +162,7 @@ func (d *controlPlaneStatusDisplayData) Write(f io.Writer, detailed bool, now ti
 
 	if detailed && len(d.Operators.Updating) > 0 {
 		table := tabwriter.NewWriter(f, 0, 0, 3, ' ', 0)
-		f.Write([]byte("\nUpdating Cluster Operators"))
+		_, _ = f.Write([]byte("\nUpdating Cluster Operators"))
 		_, _ = table.Write([]byte("\nNAME\tSINCE\tREASON\tMESSAGE\n"))
 		for _, o := range d.Operators.Updating {
 			reason := o.Condition.Reason

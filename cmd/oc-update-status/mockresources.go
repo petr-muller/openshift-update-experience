@@ -15,10 +15,10 @@ import (
 type mockData struct {
 	path string
 
-	cvInsights ouev1alpha1.ClusterVersionProgressInsightList
-	coInsights ouev1alpha1.ClusterOperatorProgressInsightList
+	cvInsights   ouev1alpha1.ClusterVersionProgressInsightList
+	coInsights   ouev1alpha1.ClusterOperatorProgressInsightList
+	nodeInsights ouev1alpha1.NodeProgressInsightList
 	// TODO(muller): Enable as I am adding functionality to the plugin.
-	// nodeInsights   *ouev1alpha1.NodeProgressInsightList
 	// healthInsights *ouev1alpha1.UpdateHealthInsightList
 
 	mockNow time.Time
@@ -60,11 +60,11 @@ func (o *mockData) load() error {
 		return fmt.Errorf("failed to load ClusterOperator insights: %w", err)
 	}
 
-	// TODO(muller): Enable as I am adding functionality to the plugin.
-	// if err := o.loadNodeInsights(decoder); err != nil {
-	// 	return fmt.Errorf("failed to load Node insights: %w", err)
-	// }
+	if err := o.loadNodeInsights(decoder); err != nil {
+		return fmt.Errorf("failed to load Node insights: %w", err)
+	}
 
+	// TODO(muller): Enable as I am adding functionality to the plugin.
 	// if err := o.loadHealthInsights(decoder); err != nil {
 	// 	return fmt.Errorf("failed to load Health insights: %w", err)
 	// }
@@ -194,32 +194,37 @@ func (o *mockData) loadClusterOperatorInsights(decoder runtime.Decoder) error {
 	return nil
 }
 
-// func (o *mockData) loadNodeInsights(decoder runtime.Decoder) error {
-// 	insightsPath := path.Join(o.path, "node-insights.yaml")
-// 	insightsRaw, err := os.ReadFile(insightsPath)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to read Node insights file %s: %w", insightsPath, err)
-// 	}
-// 	insightsObj, err := runtime.Decode(decoder, insightsRaw)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to decode Node insights file %s: %w", insightsPath, err)
-// 	}
-// 	switch insightsObj := insightsObj.(type) {
-// 	case *ouev1alpha1.NodeProgressInsightList:
-// 		o.nodeInsights = insightsObj
-// 	case *corev1.List:
-// 		list, err := asResourceList[ouev1alpha1.NodeProgressInsight](insightsObj, decoder)
-// 		if err != nil {
-// 			return fmt.Errorf("error while parsing file %s: %w", insightsPath, err)
-// 		}
-// 		o.nodeInsights = &ouev1alpha1.NodeProgressInsightList{
-// 			Items: list,
-// 		}
-// 	default:
-// 		return fmt.Errorf("unexpected object type %T in Node insights file %s", insightsObj, insightsPath)
-// 	}
-// 	return nil
-// }
+func (o *mockData) loadNodeInsights(decoder runtime.Decoder) error {
+	insightsPath := path.Join(o.path, "node-insights.yaml")
+	insightsRaw, err := os.ReadFile(insightsPath)
+	switch {
+	case os.IsNotExist(err):
+		o.nodeInsights = ouev1alpha1.NodeProgressInsightList{}
+		return nil
+	case err != nil:
+		return fmt.Errorf("failed to read Node insights file %s: %w", insightsPath, err)
+	}
+
+	insightsObj, err := runtime.Decode(decoder, insightsRaw)
+	if err != nil {
+		return fmt.Errorf("failed to decode Node insights file %s: %w", insightsPath, err)
+	}
+	switch insightsObj := insightsObj.(type) {
+	case *ouev1alpha1.NodeProgressInsightList:
+		o.nodeInsights = *insightsObj
+	case *corev1.List:
+		list, err := asResourceList[ouev1alpha1.NodeProgressInsight](insightsObj, decoder)
+		if err != nil {
+			return fmt.Errorf("error while parsing file %s: %w", insightsPath, err)
+		}
+		o.nodeInsights = ouev1alpha1.NodeProgressInsightList{
+			Items: list,
+		}
+	default:
+		return fmt.Errorf("unexpected object type %T in Node insights file %s", insightsObj, insightsPath)
+	}
+	return nil
+}
 
 // func (o *mockData) loadHealthInsights(decoder runtime.Decoder) error {
 // 	insightsPath := path.Join(o.path, "health-insights.yaml")

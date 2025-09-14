@@ -1,0 +1,95 @@
+apiVersion: v1
+items:
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: NodeProgressInsight
+  metadata:
+    name: ip-10-0-30-217.us-east-2.compute.internal
+  spec: { }
+  status:
+    name: ip-10-0-30-217.us-east-2.compute.internal
+    poolResource:
+      group: machineconfiguration.openshift.io
+      resource: machineconfigpools
+      name: master
+    scopeType: ControlPlane
+    version: 4.14.1
+    message: ""
+    conditions:
+    - type: Updating
+      status: "False"
+      reason: Pending
+      lastTransitionTime: "2024-06-11T20:51:21Z"
+      message: Node is pending update
+    - type: Degraded
+      status: "False"
+      reason: AsExpected
+      lastTransitionTime: "2024-06-11T20:51:21Z"
+      message: Node is not degraded
+    - type: Available
+      status: "True"
+      reason: AsExpected
+      lastTransitionTime: "2024-06-11T20:51:21Z"
+      message: Node is available
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: NodeProgressInsight
+  metadata:
+    name: ip-10-0-92-180.us-east-2.compute.internal
+  spec: { }
+  status:
+    name: ip-10-0-92-180.us-east-2.compute.internal
+    poolResource:
+      group: machineconfiguration.openshift.io
+      resource: machineconfigpools
+      name: master
+    scopeType: ControlPlane
+    version: 4.14.1
+    message: ""
+    conditions:
+    - type: Updating
+      status: "False"
+      reason: Pending
+      lastTransitionTime: "2024-06-11T20:51:21Z"
+      message: Node is pending update
+    - type: Degraded
+      status: "False"
+      reason: AsExpected
+      lastTransitionTime: "2024-06-11T20:51:21Z"
+      message: Node is not degraded
+    - type: Available
+      status: "True"
+      reason: AsExpected
+      lastTransitionTime: "2024-06-11T20:51:21Z"
+      message: Node is available
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: NodeProgressInsight
+  metadata:
+    name: ip-10-0-53-40.us-east-2.compute.internal
+  spec: { }
+  status:
+    name: ip-10-0-53-40.us-east-2.compute.internal
+    poolResource:
+      group: machineconfiguration.openshift.io
+      resource: machineconfigpools
+      name: master
+    scopeType: ControlPlane
+    version: 4.14.1
+    message: ""
+    conditions:
+    - type: Updating
+      status: "False"
+      reason: Pending
+      lastTransitionTime: "2024-06-11T20:51:21Z"
+      message: Node is pending update
+    - type: Degraded
+      status: "False"
+      reason: AsExpected
+      lastTransitionTime: "2024-06-11T20:51:21Z"
+      message: Node is not degraded
+    - type: Available
+      status: "True"
+      reason: AsExpected
+      lastTransitionTime: "2024-06-11T20:51:21Z"
+      message: Node is available
+kind: List
+metadata:
+  resourceVersion: ""
