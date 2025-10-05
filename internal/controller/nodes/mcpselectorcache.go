@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 
-	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
 	"github.com/petr-muller/openshift-update-experience/internal/mco"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -32,26 +31,26 @@ func (c *machineConfigPoolSelectorCache) whichMCP(l labels.Labels) string {
 	return ret
 }
 
-func (c *machineConfigPoolSelectorCache) ingest(pool *openshiftmachineconfigurationv1.MachineConfigPool) (bool, string) {
-	s, err := metav1.LabelSelectorAsSelector(pool.Spec.NodeSelector)
+func (c *machineConfigPoolSelectorCache) ingest(mcpName string, selector *metav1.LabelSelector) (bool, string) {
+	s, err := metav1.LabelSelectorAsSelector(selector)
 	if err != nil {
 		logger := logf.Log
-		logger.WithValues("MachineConfigPool", pool.Name).Error(err, "Failed to convert node selector to label selector")
-		v, loaded := c.cache.LoadAndDelete(pool.Name)
+		logger.WithValues("MachineConfigPool", mcpName).Error(err, "Failed to convert node selector to label selector")
+		v, loaded := c.cache.LoadAndDelete(mcpName)
 		if loaded {
-			return true, fmt.Sprintf("the previous selector %s for MachineConfigPool %s deleted as its current node selector cannot be converted to a label selector: %v", v, pool.Name, err)
+			return true, fmt.Sprintf("the previous selector %q for MachineConfigPool %q deleted as its current node selector cannot be converted to a label selector: %v", v, mcpName, err)
 		} else {
 			return false, ""
 		}
 	}
 
-	previous, loaded := c.cache.Swap(pool.Name, s)
+	previous, loaded := c.cache.Swap(mcpName, s)
 	if !loaded || previous.(labels.Selector).String() != s.String() {
 		var vStr string
 		if loaded {
 			vStr = previous.(labels.Selector).String()
 		}
-		return true, fmt.Sprintf("selector for MachineConfigPool %s changed from %s to %s", pool.Name, vStr, s.String())
+		return true, fmt.Sprintf("selector for MachineConfigPool %s changed from %q to %q", mcpName, vStr, s.String())
 	}
 	return false, ""
 }

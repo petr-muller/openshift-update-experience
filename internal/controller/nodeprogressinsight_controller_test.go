@@ -18,13 +18,16 @@ package controller
 
 import (
 	"context"
+	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	mcfgv1 "github.com/openshift/api/machineconfiguration/v1"
 	"github.com/petr-muller/openshift-update-experience/internal/controller/nodes"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -113,3 +116,130 @@ var _ = Describe("NodeProgressInsight Controller", Serial, func() {
 		)
 	})
 })
+
+func TestPredicate_mcpDeleted(t *testing.T) {
+	beforeMcp := &mcfgv1.MachineConfigPool{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-mcp"},
+	}
+	afterMcp := &mcfgv1.MachineConfigPool{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "test-mcp",
+			Annotations: map[string]string{"annotated": "true"},
+		},
+	}
+	created := event.CreateEvent{Object: beforeMcp}
+	updated := event.UpdateEvent{ObjectOld: beforeMcp, ObjectNew: afterMcp}
+	deleted := event.DeleteEvent{Object: beforeMcp}
+	generic := event.GenericEvent{Object: beforeMcp}
+
+	if !mcpDeleted.Delete(deleted) {
+		t.Errorf("mcpDeleted.Delete() = false, want true")
+	}
+
+	if mcpDeleted.Create(created) {
+		t.Errorf("mcpDeleted.Create() = true, want false")
+	}
+	if mcpDeleted.Update(updated) {
+		t.Errorf("mcpDeleted.Update() = true, want false")
+	}
+	if mcpDeleted.Generic(generic) {
+		t.Errorf("mcpDeleted.Generic() = true, want false")
+	}
+}
+
+func TestPredicate_mcpSelectorEvents(t *testing.T) {
+	beforeMcp := &mcfgv1.MachineConfigPool{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-mcp"},
+	}
+	afterMcp := &mcfgv1.MachineConfigPool{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "test-mcp",
+			Annotations: map[string]string{"annotated": "true"},
+		},
+	}
+
+	created := event.CreateEvent{Object: beforeMcp}
+	updated := event.UpdateEvent{ObjectOld: beforeMcp, ObjectNew: afterMcp}
+	deleted := event.DeleteEvent{Object: beforeMcp}
+	generic := event.GenericEvent{Object: beforeMcp}
+
+	if !mcpSelectorEvents.Create(created) {
+		t.Errorf("mcpSelectorEvents.Create() = false, want true")
+	}
+	if !mcpSelectorEvents.Update(updated) {
+		t.Errorf("mcpSelectorEvents.Update() = false, want true")
+	}
+
+	if mcpSelectorEvents.Delete(deleted) {
+		t.Errorf("mcpSelectorEvents.Delete() = true, want false")
+	}
+	if mcpSelectorEvents.Generic(generic) {
+		t.Errorf("mcpSelectorEvents.Generic() = true, want false")
+	}
+}
+
+func TestPredicate_mcDeleted(t *testing.T) {
+	beforeMc := &mcfgv1.MachineConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-mc"},
+	}
+	afterMc := &mcfgv1.MachineConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "test-mc",
+			Annotations: map[string]string{"annotated": "true"},
+		},
+	}
+
+	created := event.CreateEvent{Object: beforeMc}
+	updated := event.UpdateEvent{ObjectOld: beforeMc, ObjectNew: afterMc}
+	deleted := event.DeleteEvent{Object: beforeMc}
+	generic := event.GenericEvent{Object: beforeMc}
+
+	if !mcDeleted.Delete(deleted) {
+		t.Errorf("mcDeleted.Delete() = false, want true")
+	}
+
+	if mcDeleted.Create(created) {
+		t.Errorf("mcDeleted.Create() = true, want false")
+	}
+
+	if mcDeleted.Update(updated) {
+		t.Errorf("mcDeleted.Update() = true, want false")
+	}
+
+	if mcDeleted.Generic(generic) {
+		t.Errorf("mcDeleted.Generic() = true, want false")
+	}
+}
+
+func TestPredicate_mcVersionEvents(t *testing.T) {
+	beforeMc := &mcfgv1.MachineConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-mc"},
+	}
+	afterMc := &mcfgv1.MachineConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "test-mc",
+			Annotations: map[string]string{"annotated": "true"},
+		},
+	}
+
+	created := event.CreateEvent{Object: beforeMc}
+	updated := event.UpdateEvent{ObjectOld: beforeMc, ObjectNew: afterMc}
+	deleted := event.DeleteEvent{Object: beforeMc}
+	generic := event.GenericEvent{Object: beforeMc}
+
+	if !mcVersionEvents.Create(created) {
+		t.Errorf("mcVersionEvents.Create() = false, want true")
+	}
+
+	if !mcVersionEvents.Update(updated) {
+		t.Errorf("mcVersionEvents.Update() = false, want true")
+	}
+
+	if mcVersionEvents.Delete(deleted) {
+		t.Errorf("mcVersionEvents.Delete() = true, want false")
+	}
+
+	if mcVersionEvents.Generic(generic) {
+		t.Errorf("mcVersionEvents.Generic() = true, want false")
+	}
+}

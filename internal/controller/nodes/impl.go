@@ -202,7 +202,7 @@ func (r *Reconciler) initializeMachineConfigPools(ctx context.Context) error {
 
 	logger.WithValues("MachineConfigPools", len(machineConfigPools.Items)).Info("Ingesting MachineConfigPools to cache OCP versions")
 	for _, pool := range machineConfigPools.Items {
-		if ingested, message := r.mcpSelectors.ingest(&pool); ingested {
+		if ingested, message := r.mcpSelectors.ingest(pool.Name, pool.Spec.NodeSelector); ingested {
 			logger.WithValues("MachineConfigPool", pool.Name).Info(message)
 		}
 	}
@@ -396,7 +396,7 @@ func (r *Reconciler) HandleMachineConfigPool(ctx context.Context, object client.
 		return nil
 	}
 
-	modified, reason := r.mcpSelectors.ingest(pool)
+	modified, reason := r.mcpSelectors.ingest(pool.Name, pool.Spec.NodeSelector)
 	if !modified {
 		return []reconcile.Request{}
 	}

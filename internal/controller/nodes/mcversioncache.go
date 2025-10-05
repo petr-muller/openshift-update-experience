@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
+	mcfgv1 "github.com/openshift/api/machineconfiguration/v1"
 	"github.com/petr-muller/openshift-update-experience/internal/mco"
 )
 
@@ -12,7 +12,7 @@ type machineConfigVersionCache struct {
 	cache sync.Map
 }
 
-func (c *machineConfigVersionCache) ingest(mc *openshiftmachineconfigurationv1.MachineConfig) (bool, string) {
+func (c *machineConfigVersionCache) ingest(mc *mcfgv1.MachineConfig) (bool, string) {
 	if mcVersion, annotated := mc.Annotations[mco.ReleaseImageVersionAnnotationKey]; annotated && mcVersion != "" {
 		previous, loaded := c.cache.Swap(mc.Name, mcVersion)
 		if !loaded || previous.(string) != mcVersion {
