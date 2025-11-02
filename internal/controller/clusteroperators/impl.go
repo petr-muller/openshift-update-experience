@@ -79,16 +79,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	// }
 
 	// coInsight, err := assessClusterOperator(ctx, &clusterOperator, targetVersion, getDeployment)
-	existingConditions := progressInsight.Status.Conditions
-	coInsight := assessClusterOperator(ctx, &clusterOperator, targetVersion, nil, existingConditions)
-	// if err != nil {
-	// 	logger.WithValues("ClusterOperator", req.NamespacedName).Error(err, "Failed to assess ClusterOperator")
-	// 	return ctrl.Result{}, err
-	// }
 
 	progressInsight.Name = clusterOperator.Name
 
 	if progressInsightNotFound {
+		// No existing conditions when creating a new insight
+		coInsight := assessClusterOperator(ctx, &clusterOperator, targetVersion, nil, nil)
+
 		if err := r.Create(ctx, &progressInsight); err != nil {
 			logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Error(err, "Failed to create ClusterOperatorProgressInsight")
 			return ctrl.Result{}, err
@@ -103,6 +100,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Info("Created ClusterOperatorProgressInsight")
 		return ctrl.Result{}, nil
 	}
+
+	// When updating an existing insight, preserve existing conditions
+	existingConditions := progressInsight.Status.Conditions
+	coInsight := assessClusterOperator(ctx, &clusterOperator, targetVersion, nil, existingConditions)
 
 	diff := cmp.Diff(&progressInsight.Status, coInsight)
 	if diff == "" {
