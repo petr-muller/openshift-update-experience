@@ -10,6 +10,7 @@ import (
 	"github.com/petr-muller/openshift-update-experience/internal/clusteroperators"
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -19,14 +20,11 @@ import (
 
 type Reconciler struct {
 	client.Client
-
-	now func() metav1.Time
 }
 
 func NewReconciler(client client.Client) *Reconciler {
 	return &Reconciler{
 		Client: client,
-		now:    metav1.Now,
 	}
 }
 
@@ -74,15 +72,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	targetVersion := clusterVersion.Status.Desired.Version
 
-	now := r.now()
 	// getDeployment := func(ctx context.Context, what types.NamespacedName) (appsv1.Deployment, error) {
 	// 	var deployment appsv1.Deployment
 	// 	err := r.Get(ctx, what, &deployment)
 	// 	return deployment, err
 	// }
 
-	// coInsight, err := assessClusterOperator(ctx, &clusterOperator, targetVersion, getDeployment, now)
-	coInsight := assessClusterOperator(ctx, &clusterOperator, targetVersion, nil, now)
+	// coInsight, err := assessClusterOperator(ctx, &clusterOperator, targetVersion, getDeployment)
+	existingConditions := progressInsight.Status.Conditions
+	coInsight := assessClusterOperator(ctx, &clusterOperator, targetVersion, nil, existingConditions)
 	// if err != nil {
 	// 	logger.WithValues("ClusterOperator", req.NamespacedName).Error(err, "Failed to assess ClusterOperator")
 	// 	return ctrl.Result{}, err
@@ -147,12 +145,21 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 type deploymentGetter func(ctx context.Context, what types.NamespacedName) (appsv1.Deployment, error)
 
-func assessClusterOperator(_ context.Context, operator *openshiftconfigv1.ClusterOperator, targetVersion string, _ deploymentGetter, now metav1.Time) *ouev1alpha1.ClusterOperatorProgressInsightStatus {
+func assessClusterOperator(_ context.Context, operator *openshiftconfigv1.ClusterOperator, targetVersion string, _ deploymentGetter, existingConditions []metav1.Condition) *ouev1alpha1.ClusterOperatorProgressInsightStatus {
+	// Start with only the conditions we manage to avoid accumulating stale conditions
+	// meta.SetStatusCondition will preserve LastTransitionTime when status doesn't change
+	conditions := []metav1.Condition{}
+	for _, cond := range existingConditions {
+		if cond.Type == string(ouev1alpha1.ClusterOperatorProgressInsightUpdating) ||
+			cond.Type == string(ouev1alpha1.ClusterOperatorProgressInsightHealthy) {
+			conditions = append(conditions, cond)
+		}
+	}
+
 	updating := metav1.Condition{
-		Type:               string(ouev1alpha1.ClusterOperatorProgressInsightUpdating),
-		Status:             metav1.ConditionUnknown,
-		Reason:             string(ouev1alpha1.ClusterOperatorUpdatingCannotDetermine),
-		LastTransitionTime: now,
+		Type:   string(ouev1alpha1.ClusterOperatorProgressInsightUpdating),
+		Status: metav1.ConditionUnknown,
+		Reason: string(ouev1alpha1.ClusterOperatorUpdatingCannotDetermine),
 	}
 
 	// imagePullSpec, err := getImagePullSpec(ctx, operator.Name, getDeployment)
@@ -213,10 +220,9 @@ func assessClusterOperator(_ context.Context, operator *openshiftconfigv1.Cluste
 	}
 
 	health := metav1.Condition{
-		Type:               string(ouev1alpha1.ClusterOperatorProgressInsightHealthy),
-		Status:             metav1.ConditionTrue,
-		Reason:             string(ouev1alpha1.ClusterOperatorHealthyReasonAsExpected),
-		LastTransitionTime: now,
+		Type:   string(ouev1alpha1.ClusterOperatorProgressInsightHealthy),
+		Status: metav1.ConditionTrue,
+		Reason: string(ouev1alpha1.ClusterOperatorHealthyReasonAsExpected),
 	}
 
 	if available == nil {
@@ -233,8 +239,13 @@ func assessClusterOperator(_ context.Context, operator *openshiftconfigv1.Cluste
 		health.Message = degraded.Message
 	}
 
+	// Use meta.SetStatusCondition to properly handle LastTransitionTime
+	// It only updates LastTransitionTime when the status actually changes
+	meta.SetStatusCondition(&conditions, updating)
+	meta.SetStatusCondition(&conditions, health)
+
 	return &ouev1alpha1.ClusterOperatorProgressInsightStatus{
 		Name:       operator.Name,
-		Conditions: []metav1.Condition{updating, health},
+		Conditions: conditions,
 	}
 }
