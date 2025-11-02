@@ -87,28 +87,37 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	cvInsight, healthInsights := assessClusterVersion(&clusterVersion, &progressInsight.Status, &clusterOperators)
 
+	// Ensure the object exists first, handling race conditions
 	if apierrors.IsNotFound(err) {
 		if err := r.Create(ctx, &progressInsight); err != nil {
-			logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Error(err, "Failed to create ClusterVersionProgressInsight")
-			return ctrl.Result{}, err
+			if !apierrors.IsAlreadyExists(err) {
+				logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Error(err, "Failed to create ClusterVersionProgressInsight")
+				return ctrl.Result{}, err
+			}
+			// Object was created by another reconciliation, requeue to retry with latest version
+			logger.V(1).Info("ClusterVersionProgressInsight already exists, will retry", "ClusterVersionProgressInsight", req.NamespacedName)
+			return ctrl.Result{Requeue: true}, nil
 		}
-		progressInsight.Status = *cvInsight
-		if err := r.Status().Update(ctx, &progressInsight); err != nil {
-			logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Error(err, "Failed to update ClusterVersionProgressInsight status")
-			return ctrl.Result{}, err
-		}
+		// Create() populates progressInsight with resourceVersion, UID, etc from the server
 		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Info("Created ClusterVersionProgressInsight")
-		return ctrl.Result{}, r.reconcileHealthInsights(ctx, &progressInsight, healthInsights)
 	}
 
+	// Check if status update is needed
 	diff := cmp.Diff(&progressInsight.Status, cvInsight)
 	if diff == "" {
 		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Info("No changes in ClusterVersionProgressInsight, skipping update")
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, r.reconcileHealthInsights(ctx, &progressInsight, healthInsights)
 	}
+
+	// Update status
 	logger.Info(diff)
 	progressInsight.Status = *cvInsight
 	if err := r.Client.Status().Update(ctx, &progressInsight); err != nil {
+		if apierrors.IsConflict(err) {
+			// Conflict means another reconciliation updated it, requeue to try again with latest version
+			logger.V(1).Info("Conflict updating ClusterVersionProgressInsight status, will retry", "ClusterVersionProgressInsight", req.NamespacedName)
+			return ctrl.Result{Requeue: true}, nil
+		}
 		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Error(err, "Failed to update ClusterVersionProgressInsight status")
 		return ctrl.Result{}, err
 	}
