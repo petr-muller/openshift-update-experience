@@ -143,7 +143,7 @@ func Test_assessClusterOperator_Conditions_Healthy(t *testing.T) {
 			co.Status.Conditions = append(co.Status.Conditions, *tc.coDegraded)
 		}
 
-		insight := assessClusterOperator(context.Background(), co, "4.15.0", nil, now.Time)
+		insight := assessClusterOperator(context.Background(), co, "4.15.0", nil, nil)
 		healthy := meta.FindStatusCondition(insight.Conditions, string(openshiftv1alpha1.ClusterOperatorProgressInsightHealthy))
 		if healthy == nil {
 			t.Fatal("assessClusterOperator() did not return expected Healthy condition")
@@ -152,6 +152,68 @@ func Test_assessClusterOperator_Conditions_Healthy(t *testing.T) {
 		if diff := cmp.Diff(tc.expected, *healthy, ignoreLastTransitionTime); diff != "" {
 			t.Errorf("assessClusterOperator() mismatch (-want +got):\n%s", diff)
 		}
+	}
+}
+
+func Test_assessClusterOperator_PreservesLastTransitionTime(t *testing.T) {
+	now := anchor()
+	oldTime := now.minutesAgo(30)
+
+	co := &openshiftconfigv1.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-operator"},
+		Status: openshiftconfigv1.ClusterOperatorStatus{
+			Conditions: []openshiftconfigv1.ClusterOperatorStatusCondition{
+				{
+					Type:   openshiftconfigv1.OperatorAvailable,
+					Status: openshiftconfigv1.ConditionTrue,
+				},
+				{
+					Type:   openshiftconfigv1.OperatorProgressing,
+					Status: openshiftconfigv1.ConditionFalse,
+				},
+			},
+			Versions: []openshiftconfigv1.OperandVersion{
+				{Name: "operator", Version: "4.15.0"},
+			},
+		},
+	}
+
+	// First assessment with no existing conditions
+	firstInsight := assessClusterOperator(context.Background(), co, "4.15.0", nil, nil)
+
+	// Override the LastTransitionTime to simulate an older condition
+	for i := range firstInsight.Conditions {
+		firstInsight.Conditions[i].LastTransitionTime = oldTime
+	}
+
+	// Second assessment with existing conditions - nothing changed in cluster operator
+	secondInsight := assessClusterOperator(context.Background(), co, "4.15.0", nil, firstInsight.Conditions)
+
+	// Verify that LastTransitionTime was preserved (not updated)
+	for _, condition := range secondInsight.Conditions {
+		if !condition.LastTransitionTime.Equal(&oldTime) {
+			t.Errorf("LastTransitionTime should be preserved when status doesn't change. Got %v, expected %v for condition %s",
+				condition.LastTransitionTime, oldTime, condition.Type)
+		}
+	}
+
+	// Now change the operator status
+	co.Status.Conditions[0].Status = openshiftconfigv1.ConditionFalse // Available becomes False
+
+	// Third assessment - status changed
+	thirdInsight := assessClusterOperator(context.Background(), co, "4.15.0", nil, secondInsight.Conditions)
+
+	// Verify that Healthy condition's LastTransitionTime was updated (is after oldTime)
+	healthyCondition := meta.FindStatusCondition(thirdInsight.Conditions, string(openshiftv1alpha1.ClusterOperatorProgressInsightHealthy))
+	if healthyCondition == nil {
+		t.Fatal("Healthy condition not found")
+	}
+	if healthyCondition.LastTransitionTime.Equal(&oldTime) {
+		t.Errorf("LastTransitionTime should be updated when status changes. Still has old time %v", oldTime)
+	}
+	if healthyCondition.LastTransitionTime.Before(&oldTime) {
+		t.Errorf("LastTransitionTime should be after the old time when status changes. Got %v, old time %v",
+			healthyCondition.LastTransitionTime, oldTime)
 	}
 }
 
@@ -305,7 +367,7 @@ func Test_assessClusterOperator_Conditions_Updating(t *testing.T) {
 				Status:     tc.operator,
 			}
 
-			insight := assessClusterOperator(context.Background(), co, tc.version, nil, now.Time)
+			insight := assessClusterOperator(context.Background(), co, tc.version, nil, nil)
 			updating := meta.FindStatusCondition(insight.Conditions, string(openshiftv1alpha1.ClusterOperatorProgressInsightUpdating))
 			if updating == nil {
 				t.Fatal("assessClusterOperator() did not return expected Updating condition")
