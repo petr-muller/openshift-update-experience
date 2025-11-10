@@ -26,7 +26,7 @@ func Test_MachineConfigVersionCache_Ingest(t *testing.T) {
 				},
 			},
 			expectedChanged: true,
-			expectedLogMsg:  "version for MachineConfig mc1 changed from  from 4.12.0",
+			expectedLogMsg:  "version for MachineConfig mc1 changed from  to 4.12.0",
 		},
 		{
 			name: "new MC without version",
@@ -68,7 +68,7 @@ func Test_MachineConfigVersionCache_Ingest(t *testing.T) {
 				Annotations: map[string]string{mco.ReleaseImageVersionAnnotationKey: "4.13.0"},
 			},
 			expectedChanged: true,
-			expectedLogMsg:  "version for MachineConfig mc1 changed from 4.12.0 from 4.13.0",
+			expectedLogMsg:  "version for MachineConfig mc1 changed from 4.12.0 to 4.13.0",
 		},
 		{
 			name: "existing MC with version removed",

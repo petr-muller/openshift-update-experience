@@ -20,7 +20,7 @@ func (c *machineConfigVersionCache) ingest(mc *mcfgv1.MachineConfig) (bool, stri
 			if loaded {
 				previousStr = previous.(string)
 			}
-			return true, fmt.Sprintf("version for MachineConfig %s changed from %s from %s", mc.Name, previousStr, mcVersion)
+			return true, fmt.Sprintf("version for MachineConfig %s changed from %s to %s", mc.Name, previousStr, mcVersion)
 		} else {
 			return false, ""
 		}
