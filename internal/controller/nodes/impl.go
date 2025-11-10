@@ -98,10 +98,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	mcpName := r.mcpSelectors.whichMCP(labels.Set(node.Labels))
 	if mcpName == "" {
-		// We assume that every node belongs to an MCP at all time.
-		// Although conceptually the assumption might not be true (see https://docs.openshift.com/container-platform/4.17/machine_configuration/index.html#architecture-machine-config-pools_machine-config-overview),
-		// we will wait to hear from our users the issues for cluster updates and will handle them accordingly by then.
-		logger.WithValues("Node", req.NamespacedName).Info("Node does not belong to any MachineConfigPool, skipping reconciliation")
+		// Node doesn't belong to any MachineConfigPool - clean up stale insight if it exists
+		logger.WithValues("Node", req.NamespacedName).Info("Node does not belong to any MachineConfigPool")
+
+		if !progressInsightNotFound {
+			logger.WithValues("NodeProgressInsight", req.NamespacedName).Info("Deleting NodeProgressInsight for node without MCP")
+			err := r.Delete(ctx, &progressInsight)
+			if err != nil {
+				logger.Error(err, "Failed to delete NodeProgressInsight")
+			}
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, nil
 	}
 
