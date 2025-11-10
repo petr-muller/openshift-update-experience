@@ -20,21 +20,20 @@ import (
 	"context"
 
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
-	"github.com/petr-muller/openshift-update-experience/internal/clusteroperators"
-	"github.com/petr-muller/openshift-update-experience/internal/health"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
+	"github.com/petr-muller/openshift-update-experience/internal/clusterversions"
 	cocontroller "github.com/petr-muller/openshift-update-experience/internal/controller/clusteroperators"
+	"github.com/petr-muller/openshift-update-experience/internal/health"
 )
 
 // ClusterOperatorProgressInsightReconciler reconciles a ClusterOperatorProgressInsight object
@@ -65,92 +64,6 @@ func (r *ClusterOperatorProgressInsightReconciler) Reconcile(ctx context.Context
 	return r.impl.Reconcile(ctx, req)
 }
 
-type cvDesiredVersionChanged struct {
-	predicate.Funcs
-}
-
-func (p cvDesiredVersionChanged) Update(e event.UpdateEvent) bool {
-	beforeObj := e.ObjectOld
-	afterObj := e.ObjectNew
-
-	before, ok := beforeObj.(*openshiftconfigv1.ClusterVersion)
-	if !ok {
-		return false
-	}
-
-	after, ok := afterObj.(*openshiftconfigv1.ClusterVersion)
-	if !ok {
-		return false
-	}
-
-	return before.Status.Desired.Version != after.Status.Desired.Version
-}
-
-type cvHistoryChanged struct {
-	predicate.Funcs
-}
-
-func (p cvHistoryChanged) Update(e event.UpdateEvent) bool {
-	beforeObj := e.ObjectOld
-	afterObj := e.ObjectNew
-
-	before, ok := beforeObj.(*openshiftconfigv1.ClusterVersion)
-	if !ok {
-		return false
-	}
-
-	after, ok := afterObj.(*openshiftconfigv1.ClusterVersion)
-	if !ok {
-		return false
-	}
-
-	if len(before.Status.History) == 0 && len(after.Status.History) == 0 {
-		return false
-	}
-
-	if len(before.Status.History) != len(after.Status.History) {
-		return true
-	}
-
-	topBefore := before.Status.History[0]
-	topAfter := after.Status.History[0]
-
-	return topBefore.State != topAfter.State ||
-		topBefore.Version != topAfter.Version ||
-		topBefore.Image != topAfter.Image
-}
-
-type cvProgressingChanged struct {
-	predicate.Funcs
-}
-
-func (p cvProgressingChanged) Update(e event.UpdateEvent) bool {
-	beforeObj := e.ObjectOld
-	afterObj := e.ObjectNew
-
-	before, ok := beforeObj.(*openshiftconfigv1.ClusterVersion)
-	if !ok {
-		return false
-	}
-	after, ok := afterObj.(*openshiftconfigv1.ClusterVersion)
-	if !ok {
-		return false
-	}
-
-	progressingBefore := clusteroperators.FindOperatorStatusCondition(before.Status.Conditions, openshiftconfigv1.OperatorProgressing)
-	progressingAfter := clusteroperators.FindOperatorStatusCondition(after.Status.Conditions, openshiftconfigv1.OperatorProgressing)
-
-	if progressingBefore == nil && progressingAfter == nil {
-		return false
-	}
-
-	if progressingBefore == nil || progressingAfter == nil {
-		return true
-	}
-
-	return progressingBefore.Status != progressingAfter.Status
-}
-
 func allClusterOperators(c client.Client) handler.MapFunc {
 	return func(ctx context.Context, _ client.Object) []reconcile.Request {
 		operators := &openshiftconfigv1.ClusterOperatorList{}
@@ -175,12 +88,6 @@ func allClusterOperators(c client.Client) handler.MapFunc {
 	}
 }
 
-var cvVersion = predicate.NewPredicateFuncs(
-	func(obj client.Object) bool {
-		return obj.GetName() == "version"
-	},
-)
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterOperatorProgressInsightReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -202,8 +109,8 @@ func (r *ClusterOperatorProgressInsightReconciler) SetupWithManager(mgr ctrl.Man
 			&openshiftconfigv1.ClusterVersion{},
 			handler.EnqueueRequestsFromMapFunc(allClusterOperators(mgr.GetClient())),
 			builder.WithPredicates(
-				cvVersion,
-				predicate.Or(cvProgressingChanged{}, cvHistoryChanged{}, cvDesiredVersionChanged{}),
+				clusterversions.IsVersion,
+				clusterversions.StartedOrCompletedUpdating,
 			),
 		).
 		Complete(r)
