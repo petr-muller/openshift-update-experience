@@ -457,8 +457,17 @@ func (r *Reconciler) HandleMachineConfig(ctx context.Context, object client.Obje
 	return requests
 }
 
+func (r *Reconciler) AllNodes(ctx context.Context, _ client.Object) []reconcile.Request {
+	logger := logf.FromContext(ctx)
+	requests, err := r.requestsForAllNodes(ctx)
+	if err != nil {
+		logger.Error(err, "Failed to get requests for all nodes")
+		return nil
+	}
+	return requests
+}
+
 func (r *Reconciler) requestsForAllNodes(ctx context.Context) ([]reconcile.Request, error) {
-	// Reconcile all NodeProgressInsights as the change in the MachineConfigPool selector can potentially affect all of them.
 	var nodes corev1.NodeList
 	if err := r.List(ctx, &nodes, &client.ListOptions{}); err != nil {
 		return nil, fmt.Errorf("failed to list nodes: %w", err)

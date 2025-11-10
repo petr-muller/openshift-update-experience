@@ -19,8 +19,10 @@ package controller
 import (
 	"context"
 
+	openshiftconfigv1 "github.com/openshift/api/config/v1"
 	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
 	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
+	"github.com/petr-muller/openshift-update-experience/internal/clusterversions"
 	"github.com/petr-muller/openshift-update-experience/internal/controller/nodes"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -132,6 +134,14 @@ func (r *NodeProgressInsightReconciler) SetupWithManager(mgr ctrl.Manager) error
 			&openshiftmachineconfigurationv1.MachineConfig{},
 			handler.EnqueueRequestsFromMapFunc(r.impl.HandleMachineConfig),
 			builder.WithPredicates(mcVersionEvents),
+		).
+		Watches(
+			&openshiftconfigv1.ClusterVersion{},
+			handler.EnqueueRequestsFromMapFunc(r.impl.AllNodes),
+			builder.WithPredicates(
+				clusterversions.IsVersion,
+				clusterversions.StartedOrCompletedUpdating,
+			),
 		).
 		Complete(r)
 }
