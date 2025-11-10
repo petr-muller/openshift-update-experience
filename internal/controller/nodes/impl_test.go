@@ -85,7 +85,7 @@ func TestReconcile_NodeWithoutMCP_DeletesStaleInsight(t *testing.T) {
 	if err != nil {
 		t.Errorf("Reconcile() returned unexpected error: %v", err)
 	}
-	if result.Requeue {
+	if result.RequeueAfter > 0 {
 		t.Errorf("Reconcile() should not requeue")
 	}
 
@@ -153,7 +153,7 @@ func TestReconcile_NodeWithoutMCP_NoInsight_DoesNothing(t *testing.T) {
 	if err != nil {
 		t.Errorf("Reconcile() returned unexpected error: %v", err)
 	}
-	if result.Requeue {
+	if result.RequeueAfter > 0 {
 		t.Errorf("Reconcile() should not requeue")
 	}
 
