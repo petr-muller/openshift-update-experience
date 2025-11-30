@@ -287,6 +287,13 @@ func main() {
 	} else {
 		setupLog.Info("NodeProgressInsight controller disabled")
 	}
+	if err := (&controller.MachineConfigPoolProgressInsightReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MachineConfigPoolProgressInsight")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {
