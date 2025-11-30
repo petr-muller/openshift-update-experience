@@ -4,4 +4,5 @@ resources:
 - openshift_v1alpha1_updatehealthinsight.yaml
 - openshift_v1alpha1_clusteroperatorprogressinsight.yaml
 - openshift_v1alpha1_nodeprogressinsight.yaml
+- openshift_v1alpha1_machineconfigpoolprogressinsight.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
