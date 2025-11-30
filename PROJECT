@@ -42,4 +42,13 @@ resources:
   kind: NodeProgressInsight
   path: github.com/petr-muller/openshift-update-experience/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: muller.dev
+  group: openshift
+  kind: MachineConfigPoolProgressInsight
+  path: github.com/petr-muller/openshift-update-experience/api/v1alpha1
+  version: v1alpha1
 version: "3"
