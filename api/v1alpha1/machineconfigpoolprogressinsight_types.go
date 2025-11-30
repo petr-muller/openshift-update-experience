@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// MachineConfigPoolProgressInsightSpec is empty for now, MachineConfigPoolProgressInsightSpec is purely status-reporting API. In the future spec may be used
+// MachineConfigPoolProgressInsightSpec is empty for now, MachineConfigPoolProgressInsight is purely status-reporting API. In the future spec may be used
 // to hold configuration to drive what information is surfaced and how
 type MachineConfigPoolProgressInsightSpec struct {
 }
@@ -42,7 +42,7 @@ type MachineConfigPoolUpdatingReason string
 const (
 	// Updated is used with Updating=False when all nodes in MachineConfigPool completed updating
 	MachineConfigPoolUpdatingReasonUpdated MachineConfigPoolUpdatingReason = "Updated"
-	// Pending is used with Updating=False when MachinePoolConfig is not updating yet but is expected to start updating eventually
+	// Pending is used with Updating=False when MachineConfigPool is not updating yet but is expected to start updating eventually
 	MachineConfigPoolUpdatingReasonPending MachineConfigPoolUpdatingReason = "Pending"
 	// Paused is used with Updating=False when some nodes are running outdated versions but the MCP is paused
 	MachineConfigPoolUpdatingReasonPaused MachineConfigPoolUpdatingReason = "Paused"
@@ -115,7 +115,7 @@ type NodeSummary struct {
 // MachineConfigPoolProgressInsightStatus reports the state of a MachineConfigPool resource (which represents a pool of nodes
 // update in standalone clusters), during a cluster update.
 type MachineConfigPoolProgressInsightStatus struct {
-	// conditions provide details about the machine config pool update. It contains at most 10 items. Known conditions are:
+	// conditions provide details about the machine config pool update. It contains at most 5 items. Known conditions are:
 	// - Updating: whether the pool is updating; When Updating=False, the reason field can be Pending, Updated or Excluded
 	// +listType=map
 	// +listMapKey=type
@@ -157,7 +157,7 @@ type MachineConfigPoolProgressInsightStatus struct {
 	// +kubebuilder:validation:Maximum=100
 	Completion int32 `json:"completionPercent"`
 
-	// summaries is a list of counts of nodes matching certain criteria (e.g. updated, degraded, etc.). Maximum 16 items can be listed.
+	// summaries is a list of counts of nodes matching certain criteria (e.g. updated, degraded, etc.). Maximum 7 items can be listed.
 	// +listType=map
 	// +listMapKey=type
 	// +optional
@@ -173,7 +173,7 @@ type MachineConfigPoolProgressInsightStatus struct {
 // +kubebuilder:resource:path=machineconfigpoolprogressinsights,scope=Cluster
 // +kubebuilder:metadata:annotations="description=Provides summary information about an ongoing node pool update in Standalone clusters"
 // +kubebuilder:metadata:annotations="displayName=MachineConfigPoolProgressInsights"
-// +kubebuilder:validation:XValidation:rule="!has(self.status) || self.status.name == self.metadata.name",message="When status is present, .status must match .metadata.name"
+// +kubebuilder:validation:XValidation:rule="!has(self.status) || self.status.name == self.metadata.name",message="When status is present, .status.name must match .metadata.name"
 type MachineConfigPoolProgressInsight struct {
 	metav1.TypeMeta `json:",inline"`
 

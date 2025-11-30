@@ -60,9 +60,10 @@ func init() {
 }
 
 type controllersConfig struct {
-	enableClusterVersion  bool
-	enableClusterOperator bool
-	enableNode            bool
+	enableClusterVersion    bool
+	enableClusterOperator   bool
+	enableNode              bool
+	enableMachineConfigPool bool
 }
 
 // nolint:gocyclo
@@ -99,6 +100,8 @@ func main() {
 		"Enable the ClusterOperatorProgressInsight controller")
 	flag.BoolVar(&controllers.enableNode, "enable-node-controller", true,
 		"Enable the NodeProgressInsight controller")
+	flag.BoolVar(&controllers.enableMachineConfigPool, "enable-machine-config-pool-controller", true,
+		"Enable the MachineConfigPoolProgressInsight controller")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -287,13 +290,18 @@ func main() {
 	} else {
 		setupLog.Info("NodeProgressInsight controller disabled")
 	}
-	if err := (&controller.MachineConfigPoolProgressInsightReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MachineConfigPoolProgressInsight")
-		os.Exit(1)
+
+	if controllers.enableMachineConfigPool {
+		setupLog.Info("Setting up MachineConfigPoolProgressInsight controller")
+		mcpInformer := controller.NewMachineConfigPoolProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())
+		if err = mcpInformer.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "MachineConfigPoolProgressInsight")
+			os.Exit(1)
+		}
+	} else {
+		setupLog.Info("MachineConfigPoolProgressInsight controller disabled")
 	}
+
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {
