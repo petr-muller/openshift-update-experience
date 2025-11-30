@@ -20,17 +20,29 @@ import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	openshiftv1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
+	"github.com/petr-muller/openshift-update-experience/internal/controller/machineconfigpools"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // MachineConfigPoolProgressInsightReconciler reconciles a MachineConfigPoolProgressInsight object
 type MachineConfigPoolProgressInsightReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	impl *machineconfigpools.Reconciler
+}
+
+// NewMachineConfigPoolProgressInsightReconciler creates a new MachineConfigPoolProgressInsightReconciler
+func NewMachineConfigPoolProgressInsightReconciler(client client.Client, scheme *runtime.Scheme) *MachineConfigPoolProgressInsightReconciler {
+	return &MachineConfigPoolProgressInsightReconciler{
+		Client: client,
+		Scheme: scheme,
+
+		impl: machineconfigpools.NewReconciler(client, scheme),
+	}
 }
 
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=machineconfigpoolprogressinsights,verbs=get;list;watch;create;update;patch;delete
@@ -47,11 +59,7 @@ type MachineConfigPoolProgressInsightReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *MachineConfigPoolProgressInsightReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
-
-	// TODO(user): your logic here
-
-	return ctrl.Result{}, nil
+	return r.impl.Reconcile(ctx, req)
 }
 
 // SetupWithManager sets up the controller with the Manager.
