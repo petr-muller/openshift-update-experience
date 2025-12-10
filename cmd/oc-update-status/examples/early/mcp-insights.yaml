@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: List
+items:
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: MachineConfigPoolProgressInsight
+  metadata:
+    name: master
+  spec: { }
+  status:
+    name: master
+    scopeType: ControlPlane
+    assessment: Pending
+    completionPercent: 0
+    summaries:
+    - type: Total
+      count: 3
+    - type: Available
+      count: 3
+    - type: Progressing
+      count: 0
+    - type: Outdated
+      count: 3
+    - type: Draining
+      count: 0
+    - type: Excluded
+      count: 0
+    - type: Degraded
+      count: 0
+    conditions:
+    - type: Updating
+      status: "False"
+      reason: Pending
+      lastTransitionTime: "2024-06-11T20:51:21Z"
+      message: "MachineConfigPool is pending update"
+    - type: Healthy
+      status: "True"
+      reason: AsExpected
+      lastTransitionTime: "2024-06-11T20:51:21Z"
+      message: "MachineConfigPool is healthy"
+- apiVersion: openshift.muller.dev/v1alpha1
+  kind: MachineConfigPoolProgressInsight
+  metadata:
+    name: worker
+  spec: { }
+  status:
+    name: worker
+    scopeType: WorkerPool
+    assessment: Pending
+    completionPercent: 0
+    summaries:
+    - type: Total
+      count: 3
+    - type: Available
+      count: 3
+    - type: Progressing
+      count: 0
+    - type: Outdated
+      count: 3
+    - type: Draining
+      count: 0
+    - type: Excluded
+      count: 0
+    - type: Degraded
+      count: 0
+    conditions:
+    - type: Updating
+      status: "False"
+      reason: Pending
+      lastTransitionTime: "2024-06-11T20:51:21Z"
+      message: "MachineConfigPool is pending update"
+    - type: Healthy
+      status: "True"
+      reason: AsExpected
+      lastTransitionTime: "2024-06-11T20:51:21Z"
+      message: "MachineConfigPool is healthy"

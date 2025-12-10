@@ -18,6 +18,7 @@ type mockData struct {
 	cvInsights   ouev1alpha1.ClusterVersionProgressInsightList
 	coInsights   ouev1alpha1.ClusterOperatorProgressInsightList
 	nodeInsights ouev1alpha1.NodeProgressInsightList
+	mcpInsights  ouev1alpha1.MachineConfigPoolProgressInsightList
 	// TODO(muller): Enable as I am adding functionality to the plugin.
 	// healthInsights *ouev1alpha1.UpdateHealthInsightList
 
@@ -62,6 +63,10 @@ func (o *mockData) load() error {
 
 	if err := o.loadNodeInsights(decoder); err != nil {
 		return fmt.Errorf("failed to load Node insights: %w", err)
+	}
+
+	if err := o.loadMachineConfigPoolInsights(decoder); err != nil {
+		return fmt.Errorf("failed to load MachineConfigPool insights: %w", err)
 	}
 
 	// TODO(muller): Enable as I am adding functionality to the plugin.
@@ -222,6 +227,38 @@ func (o *mockData) loadNodeInsights(decoder runtime.Decoder) error {
 		}
 	default:
 		return fmt.Errorf("unexpected object type %T in Node insights file %s", insightsObj, insightsPath)
+	}
+	return nil
+}
+
+func (o *mockData) loadMachineConfigPoolInsights(decoder runtime.Decoder) error {
+	insightsPath := path.Join(o.path, "mcp-insights.yaml")
+	insightsRaw, err := os.ReadFile(insightsPath)
+	switch {
+	case os.IsNotExist(err):
+		o.mcpInsights = ouev1alpha1.MachineConfigPoolProgressInsightList{}
+		return nil
+	case err != nil:
+		return fmt.Errorf("failed to read MachineConfigPool insights file %s: %w", insightsPath, err)
+	}
+
+	insightsObj, err := runtime.Decode(decoder, insightsRaw)
+	if err != nil {
+		return fmt.Errorf("failed to decode MachineConfigPool insights file %s: %w", insightsPath, err)
+	}
+	switch insightsObj := insightsObj.(type) {
+	case *ouev1alpha1.MachineConfigPoolProgressInsightList:
+		o.mcpInsights = *insightsObj
+	case *corev1.List:
+		list, err := asResourceList[ouev1alpha1.MachineConfigPoolProgressInsight](insightsObj, decoder)
+		if err != nil {
+			return fmt.Errorf("error while parsing file %s: %w", insightsPath, err)
+		}
+		o.mcpInsights = ouev1alpha1.MachineConfigPoolProgressInsightList{
+			Items: list,
+		}
+	default:
+		return fmt.Errorf("unexpected object type %T in MachineConfigPool insights file %s", insightsObj, insightsPath)
 	}
 	return nil
 }

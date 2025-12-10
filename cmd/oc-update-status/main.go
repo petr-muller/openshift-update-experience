@@ -139,6 +139,17 @@ func (o *options) NodeProgressInsights(ctx context.Context) (ouev1alpha1.NodePro
 	return nodeInsights, err
 }
 
+func (o *options) MachineConfigPoolProgressInsights(ctx context.Context) (
+	ouev1alpha1.MachineConfigPoolProgressInsightList, error) {
+	if o.mockData.path != "" {
+		return o.mockData.mcpInsights, nil
+	}
+
+	var mcpInsights ouev1alpha1.MachineConfigPoolProgressInsightList
+	err := o.client.List(ctx, &mcpInsights)
+	return mcpInsights, err
+}
+
 // TODO(muller): Enable as I am adding functionality to the plugin.
 // func (o *options) UpdateHealthInsights(ctx context.Context) (ouev1alpha1.UpdateHealthInsight, error) {
 // 	if o.mockData.path != "" {
@@ -218,6 +229,14 @@ func (o *options) Run(ctx context.Context) error {
 	controlPlaneStatusData := assessControlPlaneStatus(&cvInsight.Status, cos, now)
 	_ = controlPlaneStatusData.Write(o.Out, o.enabledDetailed(detailedOutputOperators), now)
 	controlPlanePoolStatusData.WriteNodes(o.Out, o.enabledDetailed(detailedOutputNodes), defaultNodesShown)
+
+	mcpInsights, err := o.MachineConfigPoolProgressInsights(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get MachineConfigPool insights: %w", err)
+	}
+
+	workerPoolsDisplayData := assessWorkerPools(mcpInsights)
+	workerPoolsDisplayData.Write(o.Out)
 
 	return nil
 }
