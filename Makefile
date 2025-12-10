@@ -148,19 +148,19 @@ run: manifests generate fmt vet ## Run a controller from your host.
 
 .PHONY: run-only-cv
 run-only-cv: manifests generate fmt vet
-	go run ./cmd/main.go --enable-cluster-version-controller=true --enable-cluster-operator-controller=false --enable-node-controller=false --enable-machine-config-controller=false
+	go run ./cmd/main.go --enable-cluster-version-controller=true --enable-cluster-operator-controller=false --enable-node-controller=false --enable-machine-config-pool-controller=false
 
 .PHONY: run-only-co
 run-only-co: manifests generate fmt vet
-	go run ./cmd/main.go --enable-cluster-version-controller=false --enable-cluster-operator-controller=true --enable-node-controller=false --enable-machine-config-controller=false
+	go run ./cmd/main.go --enable-cluster-version-controller=false --enable-cluster-operator-controller=true --enable-node-controller=false --enable-machine-config-pool-controller=false
 
 .PHONY: run-only-node
 run-only-node: manifests generate fmt vet
-	go run ./cmd/main.go --enable-cluster-version-controller=false --enable-cluster-operator-controller=false --enable-node-controller=true  --enable-machine-config-controller=false
+	go run ./cmd/main.go --enable-cluster-version-controller=false --enable-cluster-operator-controller=false --enable-node-controller=true  --enable-machine-config-pool-controller=false
 
 .PHONY: run-only-mcp
 run-only-mcp: manifests generate fmt vet
-	go run ./cmd/main.go --enable-cluster-version-controller=false --enable-cluster-operator-controller=false --enable-node-controller=false  --enable-machine-config-controller=true
+	go run ./cmd/main.go --enable-cluster-version-controller=false --enable-cluster-operator-controller=false --enable-node-controller=false  --enable-machine-config-pool-controller=true
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.

@@ -37,8 +37,7 @@ var _ = Describe("MachineConfigPoolProgressInsight Controller", func() {
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Name: resourceName,
 		}
 		machineconfigpoolprogressinsight := &openshiftv1alpha1.MachineConfigPoolProgressInsight{}
 
@@ -48,10 +47,8 @@ var _ = Describe("MachineConfigPoolProgressInsight Controller", func() {
 			if err != nil && errors.IsNotFound(err) {
 				resource := &openshiftv1alpha1.MachineConfigPoolProgressInsight{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
+						Name: resourceName,
 					},
-					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -61,6 +58,9 @@ var _ = Describe("MachineConfigPoolProgressInsight Controller", func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &openshiftv1alpha1.MachineConfigPoolProgressInsight{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
+			if errors.IsNotFound(err) {
+				return
+			}
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Cleanup the specific resource instance MachineConfigPoolProgressInsight")
@@ -68,10 +68,7 @@ var _ = Describe("MachineConfigPoolProgressInsight Controller", func() {
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &MachineConfigPoolProgressInsightReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
+			controllerReconciler := NewMachineConfigPoolProgressInsightReconciler(k8sClient, k8sClient.Scheme())
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,

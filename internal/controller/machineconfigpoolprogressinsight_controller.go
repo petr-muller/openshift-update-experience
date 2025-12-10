@@ -19,12 +19,14 @@ package controller
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/runtime"
-
+	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
 	openshiftv1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
 	"github.com/petr-muller/openshift-update-experience/internal/controller/machineconfigpools"
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // MachineConfigPoolProgressInsightReconciler reconciles a MachineConfigPoolProgressInsight object
@@ -48,6 +50,7 @@ func NewMachineConfigPoolProgressInsightReconciler(client client.Client, scheme 
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=machineconfigpoolprogressinsights,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=machineconfigpoolprogressinsights/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=machineconfigpoolprogressinsights/finalizers,verbs=update
+// +kubebuilder:rbac:groups=machineconfiguration.openshift.io,resources=machineconfigpools,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -67,5 +70,17 @@ func (r *MachineConfigPoolProgressInsightReconciler) SetupWithManager(mgr ctrl.M
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&openshiftv1alpha1.MachineConfigPoolProgressInsight{}).
 		Named("machineconfigpoolprogressinsight").
+		Watches(
+			&openshiftmachineconfigurationv1.MachineConfigPool{},
+			handler.EnqueueRequestsFromMapFunc(r.handleMachineConfigPoolEvent),
+		).
 		Complete(r)
+}
+
+// handleMachineConfigPoolEvent maps MachineConfigPool events to reconcile requests
+// Since insight names match MCP names 1:1, we just return a request with the same name
+func (r *MachineConfigPoolProgressInsightReconciler) handleMachineConfigPoolEvent(ctx context.Context, obj client.Object) []reconcile.Request {
+	return []reconcile.Request{
+		{NamespacedName: client.ObjectKey{Name: obj.GetName()}},
+	}
 }
