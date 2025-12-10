@@ -36,6 +36,7 @@ The operator monitors ClusterVersion, ClusterOperator, and Node resources during
 - `make run-only-cv` - Run only ClusterVersion controller
 - `make run-only-co` - Run only ClusterOperator controller
 - `make run-only-node` - Run only Node controller
+- `make run-only-mcp` - Run only MachineConfigPool controller
 
 ### Deployment
 - `make install` - Install CRDs to cluster
@@ -47,7 +48,7 @@ The operator monitors ClusterVersion, ClusterOperator, and Node resources during
 
 ### API Resources (api/v1alpha1)
 
-The operator defines four Custom Resource Definitions (CRDs):
+The operator defines five Custom Resource Definitions (CRDs):
 
 1. **ClusterVersionProgressInsight** - Tracks control plane update progress
    - Monitors `clusterversions.config.openshift.io` resource
@@ -65,7 +66,14 @@ The operator defines four Custom Resource Definitions (CRDs):
    - Conditions: Updating, Degraded, Available
    - Updating reasons: Draining, Updating, Rebooting, Paused, Pending, Completed
 
-4. **UpdateHealthInsight** - Overall update health (not yet fully implemented)
+4. **MachineConfigPoolProgressInsight** - Tracks worker pool update progress
+   - One insight per MachineConfigPool (e.g., worker, custom pools)
+   - Status includes: pool name, scope type, assessment, completion percentage, node summaries
+   - Summaries track: Total, Available, Progressing, Outdated, Draining, Excluded, Degraded nodes
+   - Conditions: Updating, Healthy
+   - Assessment types: Pending, Progressing, Completed, Degraded, Excluded
+
+5. **UpdateHealthInsight** - Overall update health (not yet fully implemented)
 
 ### Controller Architecture
 
@@ -123,7 +131,9 @@ The plugin reads ProgressInsight CRDs and formats them for display:
 - `main.go` - CLI setup, resource fetching, orchestration
 - `controlplane.go` - Control plane status formatting
 - `nodes.go` - Node status formatting
-- `mockresources.go` - Mock data loading for testing
+- `workerpools.go` - Worker pool status formatting with assessment, completion, and node status
+- `mockresources.go` - Mock data loading for testing with generic `loadInsightListFromFile` helper
+- `*_test.go` - Unit tests following table-driven test pattern with parallel execution
 - Supports `--details={none,all,nodes,health,operators}` flag
 - Supports `--mocks` flag for testing with fixture data
 
@@ -137,7 +147,10 @@ The plugin reads ProgressInsight CRDs and formats them for display:
 ### Testing Philosophy
 - Controllers use envtest (real Kubernetes API server) for integration tests
 - Tests use Ginkgo/Gomega framework
-- Mock data fixtures available in `cmd/oc-update-status/` for CLI testing
+- CLI plugin uses table-driven tests with `t.Parallel()` for formatter functions
+- Mock data fixtures available in `cmd/oc-update-status/examples/` for CLI testing
+- TDD approach: write tests first, see them fail, then implement to make them pass
+- Test data should be comprehensive (e.g., all 7 node summary types for MCP tests)
 
 ### Go Version
 - Go 1.24.0+ required
@@ -157,6 +170,7 @@ The controller manager supports:
 - `--enable-node-controller` (default: true) - NodeProgressInsight controller
   - When enabled: Central node state controller is automatically enabled
   - NodeProgressInsight reads pre-computed state from the central controller
+- `--enable-machine-config-pool-controller` (default: true)
 - Standard controller-runtime flags (metrics, leader election, etc.)
 
 ### Metrics (Central Node State Controller)
