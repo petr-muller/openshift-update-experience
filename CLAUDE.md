@@ -36,6 +36,7 @@ The operator monitors ClusterVersion, ClusterOperator, and Node resources during
 - `make run-only-cv` - Run only ClusterVersion controller
 - `make run-only-co` - Run only ClusterOperator controller
 - `make run-only-node` - Run only Node controller
+- `make run-only-mcp` - Run only MachineConfigPool controller
 
 ### Deployment
 - `make install` - Install CRDs to cluster
@@ -47,7 +48,7 @@ The operator monitors ClusterVersion, ClusterOperator, and Node resources during
 
 ### API Resources (api/v1alpha1)
 
-The operator defines four Custom Resource Definitions (CRDs):
+The operator defines five Custom Resource Definitions (CRDs):
 
 1. **ClusterVersionProgressInsight** - Tracks control plane update progress
    - Monitors `clusterversions.config.openshift.io` resource
@@ -65,24 +66,32 @@ The operator defines four Custom Resource Definitions (CRDs):
    - Conditions: Updating, Degraded, Available
    - Updating reasons: Draining, Updating, Rebooting, Paused, Pending, Completed
 
-4. **UpdateHealthInsight** - Overall update health (not yet fully implemented)
+4. **MachineConfigPoolProgressInsight** - Tracks worker pool update progress
+   - One insight per MachineConfigPool (e.g., master, worker, custom pools)
+   - Monitors `machineconfigpools.machineconfiguration.openshift.io` resources
+   - Status currently includes: pool name, scope type (ControlPlane for master, WorkerPool for others)
+   - Future: Will include assessment, completion percentage, node summaries, and conditions
+   - Automatically deleted when corresponding MachineConfigPool is deleted
+
+5. **UpdateHealthInsight** - Overall update health (not yet fully implemented)
 
 ### Controller Architecture
 
 Controllers follow a two-layer pattern:
 - **Thin wrapper** (`internal/controller/*_controller.go`) - Handles controller-runtime setup, watches, RBAC markers
-- **Implementation** (`internal/controller/{clusterversions,clusteroperators,nodes}/impl.go`) - Contains reconciliation logic
+- **Implementation** (`internal/controller/{clusterversions,clusteroperators,nodes,machineconfigpools}/impl.go`) - Contains reconciliation logic
 
 Each controller:
 - Watches upstream OpenShift resources (ClusterVersion, ClusterOperator, Node, MachineConfigPool)
 - Reconciles when changes occur
-- Updates corresponding ProgressInsight CRD status
+- Creates, updates, or deletes corresponding ProgressInsight CRD
+- Uses status subresource for updates to avoid conflicts
 
 ### Key Internal Packages
 
-- **internal/controller/{clusterversions,clusteroperators,nodes}** - Controller implementation logic
+- **internal/controller/{clusterversions,clusteroperators,nodes,machineconfigpools}** - Controller implementation logic
   - `impl.go` - Main reconciliation logic
-  - `impl_test.go` - Unit tests
+  - `impl_test.go` - Unit tests using fake client and table-driven tests
 - **internal/controller/nodes/** - Additional node controller components:
   - `mcpselectorcache.go` - Caches MachineConfigPool selectors for node->pool mapping
   - `mcversioncache.go` - Caches MachineConfig->version mappings
@@ -96,21 +105,28 @@ The plugin reads ProgressInsight CRDs and formats them for display:
 - `main.go` - CLI setup, resource fetching, orchestration
 - `controlplane.go` - Control plane status formatting
 - `nodes.go` - Node status formatting
-- `mockresources.go` - Mock data loading for testing
+- `workerpools.go` - Worker pool status formatting with assessment, completion, and node status
+- `mockresources.go` - Mock data loading for testing with generic `loadInsightListFromFile` helper
+- `*_test.go` - Unit tests following table-driven test pattern with parallel execution
 - Supports `--details={none,all,nodes,health,operators}` flag
 - Supports `--mocks` flag for testing with fixture data
 
 ### Entry Points
 
-- **Controller Manager**: `cmd/main.go` - Sets up manager with all three controllers
+- **Controller Manager**: `cmd/main.go` - Sets up manager with all four controllers
 - **CLI Plugin**: `cmd/oc-update-status/main.go` - Cobra-based CLI
 
 ## Development Notes
 
 ### Testing Philosophy
-- Controllers use envtest (real Kubernetes API server) for integration tests
-- Tests use Ginkgo/Gomega framework
-- Mock data fixtures available in `cmd/oc-update-status/` for CLI testing
+- Controllers use envtest (real Kubernetes API server) for integration tests with Ginkgo/Gomega
+- Unit tests use fake clients with `fake.NewClientBuilder()` and `WithStatusSubresource()` for proper status handling
+- Tests use table-driven patterns with descriptive test names
+- CLI plugin uses table-driven tests with `t.Parallel()` for formatter functions
+- Mock data fixtures available in `cmd/oc-update-status/examples/` for CLI testing
+- TDD approach: write tests first, see them fail, then implement to make them pass
+- Test data should be comprehensive (e.g., all 7 node summary types for MCP tests)
+- Always test deletion scenarios when controllers manage resource lifecycle
 
 ### Go Version
 - Go 1.24.0+ required
@@ -128,4 +144,6 @@ The controller manager supports:
 - `--enable-cluster-version-controller` (default: true)
 - `--enable-cluster-operator-controller` (default: true)
 - `--enable-node-controller` (default: true)
+- `--enable-machine-config-pool-controller` (default: true)
 - Standard controller-runtime flags (metrics, leader election, etc.)
+- When adding new functionality, always add appropritate test coverage

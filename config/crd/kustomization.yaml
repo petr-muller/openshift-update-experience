@@ -6,6 +6,7 @@ resources:
 - bases/openshift.muller.dev_updatehealthinsights.yaml
 - bases/openshift.muller.dev_clusteroperatorprogressinsights.yaml
 - bases/openshift.muller.dev_nodeprogressinsights.yaml
+- bases/openshift.muller.dev_machineconfigpoolprogressinsights.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
