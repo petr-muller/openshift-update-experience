@@ -23,6 +23,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	openshiftconfigv1 "github.com/openshift/api/config/v1"
 	mcfgv1 "github.com/openshift/api/machineconfiguration/v1"
 	"github.com/petr-muller/openshift-update-experience/internal/controller/nodes"
 	corev1 "k8s.io/api/core/v1"
@@ -58,6 +59,42 @@ var _ = Describe("NodeProgressInsight Controller", Serial, func() {
 					return k8sClient.Get(ctx, types.NamespacedName{Name: "test-node"}, &openshiftv1alpha1.NodeProgressInsight{})
 				}).Should(MatchError(ContainSubstring("not found")))
 			}
+
+			mcp := &mcfgv1.MachineConfigPool{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: "worker"}, mcp)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, mcp)).To(Succeed())
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "worker"}, &mcfgv1.MachineConfigPool{})
+				}).Should(MatchError(ContainSubstring("not found")))
+			}
+
+			cv := &openshiftconfigv1.ClusterVersion{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: "version"}, cv)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, cv)).To(Succeed())
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "version"}, &openshiftconfigv1.ClusterVersion{})
+				}).Should(MatchError(ContainSubstring("not found")))
+			}
+
+			mc := &mcfgv1.MachineConfig{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: "rendered-worker-123"}, mc)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, mc)).To(Succeed())
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "rendered-worker-123"}, &mcfgv1.MachineConfig{})
+				}).Should(MatchError(ContainSubstring("not found")))
+			}
+
+			mcOld := &mcfgv1.MachineConfig{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: "rendered-worker-122"}, mcOld)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, mcOld)).To(Succeed())
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "rendered-worker-122"}, &mcfgv1.MachineConfig{})
+				}).Should(MatchError(ContainSubstring("not found")))
+			}
 		})
 
 		var minutesAgo [60]metav1.Time
@@ -67,12 +104,71 @@ var _ = Describe("NodeProgressInsight Controller", Serial, func() {
 		}
 
 		type testCase struct {
-			name string
-			node *corev1.Node
+			name                   string
+			node                   *corev1.Node
+			expectedUpdatingStatus metav1.ConditionStatus
+			expectedUpdatingReason string
+			expectedScope          openshiftv1alpha1.ScopeType
+			expectedVersion        string
 		}
 
 		DescribeTable("should create progress insight with matching status",
 			func(tc testCase) {
+				By("Creating ClusterVersion")
+				cv := &openshiftconfigv1.ClusterVersion{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "version",
+					},
+				}
+				Expect(k8sClient.Create(ctx, cv)).To(Succeed())
+				cv.Status = openshiftconfigv1.ClusterVersionStatus{
+					History: []openshiftconfigv1.UpdateHistory{
+						{
+							State:       openshiftconfigv1.CompletedUpdate,
+							Version:     "4.15.0",
+							StartedTime: metav1.Now(),
+						},
+					},
+				}
+				Expect(k8sClient.Status().Update(ctx, cv)).To(Succeed())
+
+				By("Creating MachineConfigPool")
+				mcp := &mcfgv1.MachineConfigPool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "worker",
+					},
+					Spec: mcfgv1.MachineConfigPoolSpec{
+						NodeSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"node-role.kubernetes.io/worker": "",
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, mcp)).To(Succeed())
+
+				By("Creating MachineConfig")
+				mc := &mcfgv1.MachineConfig{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "rendered-worker-123",
+						Annotations: map[string]string{
+							"machineconfiguration.openshift.io/release-image-version": "4.15.0",
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, mc)).To(Succeed())
+
+				By("Creating MachineConfig for current config")
+				mcOld := &mcfgv1.MachineConfig{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "rendered-worker-122",
+						Annotations: map[string]string{
+							"machineconfiguration.openshift.io/release-image-version": "4.15.0",
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, mcOld)).To(Succeed())
+
 				By("Creating the input Node")
 				status := tc.node.Status.DeepCopy()
 				Expect(k8sClient.Create(ctx, tc.node)).To(Succeed())
@@ -94,24 +190,74 @@ var _ = Describe("NodeProgressInsight Controller", Serial, func() {
 				By("Verifying the progress insight was created")
 				progressInsight := &openshiftv1alpha1.NodeProgressInsight{}
 				err = k8sClient.Get(ctx, types.NamespacedName{Name: tc.node.Name}, progressInsight)
-				// TODO(muller): Implement tests when working on the functionality
-				// Expect(err).NotTo(HaveOccurred())
-				Expect(err).To(HaveOccurred())
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Verifying the progress insight status")
+				Expect(progressInsight.Status.Name).To(Equal(tc.node.Name))
+				Expect(progressInsight.Status.Scope).To(Equal(tc.expectedScope))
+				Expect(progressInsight.Status.Version).To(Equal(tc.expectedVersion))
+
+				By("Verifying the Updating condition")
+				var updatingCondition *metav1.Condition
+				for i := range progressInsight.Status.Conditions {
+					if progressInsight.Status.Conditions[i].Type == string(openshiftv1alpha1.NodeStatusInsightUpdating) {
+						updatingCondition = &progressInsight.Status.Conditions[i]
+						break
+					}
+				}
+				Expect(updatingCondition).NotTo(BeNil())
+				Expect(updatingCondition.Status).To(Equal(tc.expectedUpdatingStatus))
+				Expect(updatingCondition.Reason).To(Equal(tc.expectedUpdatingReason))
 
 				By("Cleanup")
 				Expect(k8sClient.Delete(ctx, tc.node)).To(Succeed())
-				// TODO(muller): Implement tests when working on the functionality
-				// Expect(k8sClient.Delete(ctx, progressInsight)).To(Succeed())
-				Expect(k8sClient.Delete(ctx, progressInsight)).NotTo(Succeed())
+				Expect(k8sClient.Delete(ctx, progressInsight)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, mcp)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, cv)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, mc)).To(Succeed())
+				if mcOld != nil {
+					Expect(k8sClient.Delete(ctx, mcOld)).To(Succeed())
+				}
 			},
-			// TODO(muller): Implement tests when working on the functionality
-			Entry("Node TODO", testCase{
-				name: "TODO",
+			Entry("Worker node fully updated and in Done state", testCase{
+				name: "Worker node fully updated and in Done state",
 				node: &corev1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test-node",
+						Labels: map[string]string{
+							"node-role.kubernetes.io/worker": "",
+						},
+						Annotations: map[string]string{
+							"machineconfiguration.openshift.io/currentConfig": "rendered-worker-123",
+							"machineconfiguration.openshift.io/desiredConfig": "rendered-worker-123",
+							"machineconfiguration.openshift.io/state":         "Done",
+						},
 					},
 				},
+				expectedUpdatingStatus: metav1.ConditionFalse,
+				expectedUpdatingReason: string(openshiftv1alpha1.NodeCompleted),
+				expectedScope:          openshiftv1alpha1.WorkerPoolScope,
+				expectedVersion:        "4.15.0",
+			}),
+			Entry("Worker node in Working state", testCase{
+				name: "Worker node in Working state",
+				node: &corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-node",
+						Labels: map[string]string{
+							"node-role.kubernetes.io/worker": "",
+						},
+						Annotations: map[string]string{
+							"machineconfiguration.openshift.io/currentConfig": "rendered-worker-122",
+							"machineconfiguration.openshift.io/desiredConfig": "rendered-worker-123",
+							"machineconfiguration.openshift.io/state":         "Working",
+						},
+					},
+				},
+				expectedUpdatingStatus: metav1.ConditionTrue,
+				expectedUpdatingReason: string(openshiftv1alpha1.NodeUpdating),
+				expectedScope:          openshiftv1alpha1.WorkerPoolScope,
+				expectedVersion:        "4.15.0",
 			}),
 		)
 	})

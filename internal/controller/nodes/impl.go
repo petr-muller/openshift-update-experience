@@ -134,18 +134,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	now := r.now()
 	nodeInsight := assessNode(&node, &mcp, r.machineConfigVersions.versionFor, mostRecentVersionInCVHistory, now)
-	progressInsight.Status = *nodeInsight
-	progressInsight.Name = node.Name
 
+	// Ensure the object exists first
 	if progressInsightNotFound {
+		progressInsight.Name = node.Name
 		if err := r.Create(ctx, &progressInsight); err != nil {
 			logger.WithValues("NodeProgressInsight", req.NamespacedName).Error(err, "Failed to create NodeProgressInsight")
 			return ctrl.Result{}, err
 		}
+		// Create() populates progressInsight with resourceVersion, UID, etc from the server
 		logger.WithValues("NodeProgressInsight", req.NamespacedName).Info("Created NodeProgressInsight for Node")
-		return ctrl.Result{}, nil
 	}
 
+	// Update status
+	progressInsight.Status = *nodeInsight
 	if err := r.Status().Update(ctx, &progressInsight); err != nil {
 		logger.WithValues("NodeProgressInsight", req.NamespacedName).Error(err, "Failed to update NodeProgressInsight status")
 		return ctrl.Result{}, err
@@ -311,7 +313,8 @@ func determineConditions(pool *openshiftmachineconfigurationv1.MachineConfigPool
 			estimate = ptr.To(metav1.Duration{Duration: 0})
 		}
 		available.Status = metav1.ConditionFalse
-		available.Reason = lns.GetUnavailableReason()
+		// TODO: Reason should be more informative (e.g., specific unavailability type) but we will handle that in the future
+		available.Reason = "Unavailable"
 		available.Message = lns.GetUnavailableMessage()
 		available.LastTransitionTime = metav1.Time{Time: lns.GetUnavailableSince()}
 		message = available.Message
@@ -323,7 +326,8 @@ func determineConditions(pool *openshiftmachineconfigurationv1.MachineConfigPool
 			estimate = ptr.To(metav1.Duration{Duration: 0})
 		}
 		degraded.Status = metav1.ConditionTrue
-		degraded.Reason = node.Annotations[mco.MachineConfigDaemonReasonAnnotationKey]
+		// TODO: Reason should be more informative (e.g., specific degradation type) but we will handle that in the future
+		degraded.Reason = "Degraded"
 		degraded.Message = node.Annotations[mco.MachineConfigDaemonReasonAnnotationKey]
 		message = degraded.Message
 	}
