@@ -215,9 +215,7 @@ var _ = Describe("NodeProgressInsight Controller", Serial, func() {
 				Expect(k8sClient.Delete(ctx, mcp)).To(Succeed())
 				Expect(k8sClient.Delete(ctx, cv)).To(Succeed())
 				Expect(k8sClient.Delete(ctx, mc)).To(Succeed())
-				if mcOld != nil {
-					Expect(k8sClient.Delete(ctx, mcOld)).To(Succeed())
-				}
+				Expect(k8sClient.Delete(ctx, mcOld)).To(Succeed())
 			},
 			Entry("Worker node fully updated and in Done state", testCase{
 				name: "Worker node fully updated and in Done state",
