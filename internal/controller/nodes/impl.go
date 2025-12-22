@@ -14,6 +14,7 @@ import (
 	"github.com/petr-muller/openshift-update-experience/internal/mco"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -134,7 +135,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	now := r.now()
-	nodeInsight := assessNode(&node, &mcp, r.machineConfigVersions.versionFor, mostRecentVersionInCVHistory, now)
 
 	// Ensure the object exists first
 	if progressInsightNotFound {
@@ -146,6 +146,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		// Create() populates progressInsight with resourceVersion, UID, etc from the server
 		logger.WithValues("NodeProgressInsight", req.NamespacedName).Info("Created NodeProgressInsight for Node")
 	}
+
+	// When updating an existing insight, preserve existing conditions
+	existingConditions := progressInsight.Status.Conditions
+	nodeInsight := assessNode(&node, &mcp, r.machineConfigVersions.versionFor, mostRecentVersionInCVHistory, existingConditions, now)
 
 	// Check if status update is needed
 	diff := cmp.Diff(&progressInsight.Status, nodeInsight)
@@ -165,7 +169,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	return ctrl.Result{}, nil
 }
 
-func assessNode(node *corev1.Node, mcp *openshiftmachineconfigurationv1.MachineConfigPool, machineConfigToVersion func(string) (string, bool), mostRecentVersionInCVHistory string, now metav1.Time) *ouev1alpha1.NodeProgressInsightStatus {
+func assessNode(node *corev1.Node, mcp *openshiftmachineconfigurationv1.MachineConfigPool, machineConfigToVersion func(string) (string, bool), mostRecentVersionInCVHistory string, existingConditions []metav1.Condition, now metav1.Time) *ouev1alpha1.NodeProgressInsightStatus {
 	if node == nil || mcp == nil {
 		return nil
 	}
@@ -189,7 +193,7 @@ func assessNode(node *corev1.Node, mcp *openshiftmachineconfigurationv1.MachineC
 	// at least updating or is updated.
 	isUpdating := !isUpdated && foundCurrent && foundDesired && mostRecentVersionInCVHistory == desiredVersion
 
-	conditions, message, estimate := determineConditions(mcp, node, isUpdating, isUpdated, isUnavailable, isDegraded, lns, now)
+	conditions, message, estimate := determineConditions(mcp, node, isUpdating, isUpdated, isUnavailable, isDegraded, lns, existingConditions, now)
 
 	scope := ouev1alpha1.WorkerPoolScope
 	if mcp.Name == mco.MachineConfigPoolMaster {
@@ -244,7 +248,18 @@ func (r *Reconciler) initializeMachineConfigVersions(ctx context.Context) error 
 	return nil
 }
 
-func determineConditions(pool *openshiftmachineconfigurationv1.MachineConfigPool, node *corev1.Node, isUpdating, isUpdated, isUnavailable, isDegraded bool, lns *mco.LayeredNodeState, now metav1.Time) ([]metav1.Condition, string, *metav1.Duration) {
+func determineConditions(pool *openshiftmachineconfigurationv1.MachineConfigPool, node *corev1.Node, isUpdating, isUpdated, isUnavailable, isDegraded bool, lns *mco.LayeredNodeState, existingConditions []metav1.Condition, now metav1.Time) ([]metav1.Condition, string, *metav1.Duration) {
+	// Start with only the conditions we manage to avoid accumulating stale conditions
+	// meta.SetStatusCondition will preserve LastTransitionTime when status doesn't change
+	conditions := []metav1.Condition{}
+	for _, cond := range existingConditions {
+		if cond.Type == string(ouev1alpha1.NodeStatusInsightUpdating) ||
+			cond.Type == string(ouev1alpha1.NodeStatusInsightAvailable) ||
+			cond.Type == string(ouev1alpha1.NodeStatusInsightDegraded) {
+			conditions = append(conditions, cond)
+		}
+	}
+
 	var estimate *metav1.Duration
 
 	updating := metav1.Condition{
@@ -341,7 +356,13 @@ func determineConditions(pool *openshiftmachineconfigurationv1.MachineConfigPool
 		message = degraded.Message
 	}
 
-	return []metav1.Condition{updating, available, degraded}, message, estimate
+	// Use meta.SetStatusCondition to properly handle LastTransitionTime
+	// It only updates LastTransitionTime when the status actually changes
+	meta.SetStatusCondition(&conditions, updating)
+	meta.SetStatusCondition(&conditions, available)
+	meta.SetStatusCondition(&conditions, degraded)
+
+	return conditions, message, estimate
 }
 
 func isNodeDraining(node *corev1.Node, isUpdating bool) bool {
