@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
 	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
 	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
@@ -146,7 +147,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		logger.WithValues("NodeProgressInsight", req.NamespacedName).Info("Created NodeProgressInsight for Node")
 	}
 
+	// Check if status update is needed
+	diff := cmp.Diff(&progressInsight.Status, nodeInsight)
+	if diff == "" {
+		logger.WithValues("NodeProgressInsight", req.NamespacedName).Info("No changes in NodeProgressInsight, skipping update")
+		return ctrl.Result{}, nil
+	}
+
 	// Update status
+	logger.Info(diff)
 	progressInsight.Status = *nodeInsight
 	if err := r.Status().Update(ctx, &progressInsight); err != nil {
 		logger.WithValues("NodeProgressInsight", req.NamespacedName).Error(err, "Failed to update NodeProgressInsight status")
