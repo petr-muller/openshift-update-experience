@@ -348,8 +348,24 @@ func assessControlPlaneStatus(
 	displayData.Duration = updatingFor
 
 	if cv.EstimatedCompletedAt != nil {
-		displayData.EstDuration = cv.EstimatedCompletedAt.Sub(cv.StartedAt.Time)
-		displayData.EstTimeToComplete = cv.EstimatedCompletedAt.Sub(now)
+		estDuration := cv.EstimatedCompletedAt.Sub(cv.StartedAt.Time)
+		estTimeToComplete := cv.EstimatedCompletedAt.Sub(now)
+
+		// Apply same rounding logic as Duration
+		if estDuration > 10*time.Minute {
+			estDuration = estDuration.Round(time.Minute)
+		} else {
+			estDuration = estDuration.Round(time.Second)
+		}
+
+		if estTimeToComplete > 10*time.Minute {
+			estTimeToComplete = estTimeToComplete.Round(time.Minute)
+		} else {
+			estTimeToComplete = estTimeToComplete.Round(time.Second)
+		}
+
+		displayData.EstDuration = estDuration
+		displayData.EstTimeToComplete = estTimeToComplete
 	}
 
 	for _, co := range cos {
