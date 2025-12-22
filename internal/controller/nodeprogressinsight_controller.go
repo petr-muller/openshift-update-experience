@@ -24,6 +24,7 @@ import (
 	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
 	"github.com/petr-muller/openshift-update-experience/internal/clusterversions"
 	"github.com/petr-muller/openshift-update-experience/internal/controller/nodes"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -56,6 +57,8 @@ func NewNodeProgressInsightReconciler(client client.Client, scheme *runtime.Sche
 // +kubebuilder:rbac:groups=openshift.muller.dev,resources=nodeprogressinsights/finalizers,verbs=update
 // +kubebuilder:rbac:groups=machineconfiguration.openshift.io,resources=machineconfigpools,verbs=get;list;watch
 // +kubebuilder:rbac:groups=machineconfiguration.openshift.io,resources=machineconfigs,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -115,6 +118,10 @@ func (r *NodeProgressInsightReconciler) SetupWithManager(mgr ctrl.Manager) error
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ouev1alpha1.NodeProgressInsight{}).
 		Named("nodeprogressinsight").
+		Watches(
+			&corev1.Node{},
+			&handler.EnqueueRequestForObject{},
+		).
 		Watches(
 			&openshiftmachineconfigurationv1.MachineConfigPool{},
 			handler.EnqueueRequestsFromMapFunc(r.impl.HandleDeletedMachineConfigPool),
