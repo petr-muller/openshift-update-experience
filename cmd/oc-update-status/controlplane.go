@@ -95,6 +95,14 @@ Duration:        {{ shortDuration .Duration }}{{ if .EstTimeToComplete }} (Est. 
 Operator Health: {{ .Operators.StatusSummary }}
 `
 
+func roundDuration(d time.Duration) time.Duration {
+	// Use absolute value for comparison to handle negative durations correctly
+	if d > 10*time.Minute || d < -10*time.Minute {
+		return d.Round(time.Minute)
+	}
+	return d.Round(time.Second)
+}
+
 func shortDuration(d time.Duration) string {
 	orig := d.String()
 	switch {
@@ -338,34 +346,11 @@ func assessControlPlaneStatus(
 		updatingFor = cv.CompletedAt.Sub(cv.StartedAt.Time)
 	}
 
-	// precision to seconds when under 10m
-	if updatingFor > 10*time.Minute {
-		updatingFor = updatingFor.Round(time.Minute)
-	} else {
-		updatingFor = updatingFor.Round(time.Second)
-	}
-
-	displayData.Duration = updatingFor
+	displayData.Duration = roundDuration(updatingFor)
 
 	if cv.EstimatedCompletedAt != nil {
-		estDuration := cv.EstimatedCompletedAt.Sub(cv.StartedAt.Time)
-		estTimeToComplete := cv.EstimatedCompletedAt.Sub(now)
-
-		// Apply same rounding logic as Duration
-		if estDuration > 10*time.Minute {
-			estDuration = estDuration.Round(time.Minute)
-		} else {
-			estDuration = estDuration.Round(time.Second)
-		}
-
-		if estTimeToComplete > 10*time.Minute {
-			estTimeToComplete = estTimeToComplete.Round(time.Minute)
-		} else {
-			estTimeToComplete = estTimeToComplete.Round(time.Second)
-		}
-
-		displayData.EstDuration = estDuration
-		displayData.EstTimeToComplete = estTimeToComplete
+		displayData.EstDuration = roundDuration(cv.EstimatedCompletedAt.Sub(cv.StartedAt.Time))
+		displayData.EstTimeToComplete = roundDuration(cv.EstimatedCompletedAt.Sub(now))
 	}
 
 	for _, co := range cos {
