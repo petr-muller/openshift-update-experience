@@ -35,7 +35,7 @@ func TestRoundDuration(t *testing.T) {
 		{
 			name:     "positive duration exactly 10m rounds to seconds",
 			input:    10*time.Minute + 500*time.Millisecond,
-			expected: 10 * time.Minute, // 10.5s rounds to 10s (ties round to even)
+			expected: 10 * time.Minute, // 10m500ms rounds to 10m (using second precision, 10.5s rounds to even)
 		},
 		{
 			name:     "negative duration < -10m rounds to minutes",
@@ -50,7 +50,7 @@ func TestRoundDuration(t *testing.T) {
 		{
 			name:     "negative duration exactly -10m rounds to seconds",
 			input:    -10*time.Minute - 500*time.Millisecond,
-			expected: -10 * time.Minute, // -10.5s rounds to -10s (ties round to even)
+			expected: -10 * time.Minute, // -10m500ms rounds to -10m (using second precision, -10.5s rounds to even)
 		},
 		{
 			name:     "zero duration",
@@ -1305,7 +1305,8 @@ func Test_assessControlPlaneStatus_Estimates(t *testing.T) {
 			startedAt:           metav1.NewTime(now.Add(-30 * time.Minute)),
 			estimatedDuration:   15*time.Minute + 30*time.Second,
 			expectedEstDuration: 16 * time.Minute,
-			// (now-30m)+16m = now-14m, started with 15m30s rounds to 16m, so -14m30s rounds to -15m
+			// startedAt is (now-30m), estimatedDuration is 15m30s so EstimatedCompletedAt = (now-30m)+15m30s = now-14m30s;
+			// EstTimeToComplete = EstimatedCompletedAt - now = -14m30s, which rounds to -15m
 			expectedEstToComplete: -15 * time.Minute,
 		},
 	}
