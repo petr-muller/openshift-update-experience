@@ -14,6 +14,62 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+func TestRoundDuration(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		input    time.Duration
+		expected time.Duration
+	}{
+		{
+			name:     "positive duration > 10m rounds to minutes",
+			input:    15*time.Minute + 30*time.Second,
+			expected: 16 * time.Minute,
+		},
+		{
+			name:     "positive duration < 10m rounds to seconds",
+			input:    5*time.Minute + 500*time.Millisecond,
+			expected: 5*time.Minute + 1*time.Second,
+		},
+		{
+			name:     "positive duration exactly 10m rounds to seconds",
+			input:    10*time.Minute + 500*time.Millisecond,
+			expected: 10 * time.Minute, // 10.5s rounds to 10s (ties round to even)
+		},
+		{
+			name:     "negative duration < -10m rounds to minutes",
+			input:    -15*time.Minute - 30*time.Second,
+			expected: -16 * time.Minute,
+		},
+		{
+			name:     "negative duration > -10m rounds to seconds",
+			input:    -5*time.Minute - 500*time.Millisecond,
+			expected: -5*time.Minute - 1*time.Second,
+		},
+		{
+			name:     "negative duration exactly -10m rounds to seconds",
+			input:    -10*time.Minute - 500*time.Millisecond,
+			expected: -10 * time.Minute, // -10.5s rounds to -10s (ties round to even)
+		},
+		{
+			name:     "zero duration",
+			input:    0,
+			expected: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result := roundDuration(tc.input)
+			if result != tc.expected {
+				t.Errorf("roundDuration(%v) = %v, expected %v", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
 func TestShortDuration(t *testing.T) {
 	testCases := []struct {
 		duration string
@@ -1202,26 +1258,77 @@ func Test_assessControlPlaneStatus_Estimates(t *testing.T) {
 	t.Parallel()
 
 	now := metav1.Now()
-	for started, estimated := range map[metav1.Time]time.Duration{
-		now: 41 * time.Minute, // Estimated in +41m
-		metav1.NewTime(now.Add(-30 * time.Minute)): 42 * time.Minute, // Estimated in +12m
-		metav1.NewTime(now.Add(-90 * time.Minute)): 43 * time.Minute, // Estimated in -47m
-	} {
-		t.Run(estimated.String(), func(t *testing.T) {
+	testCases := []struct {
+		name                  string
+		startedAt             metav1.Time
+		estimatedDuration     time.Duration
+		expectedEstDuration   time.Duration
+		expectedEstToComplete time.Duration
+	}{
+		{
+			name:                  "exact minutes - 41m remaining",
+			startedAt:             now,
+			estimatedDuration:     41 * time.Minute,
+			expectedEstDuration:   41 * time.Minute,
+			expectedEstToComplete: 41 * time.Minute,
+		},
+		{
+			name:                  "exact minutes - 12m remaining",
+			startedAt:             metav1.NewTime(now.Add(-30 * time.Minute)),
+			estimatedDuration:     42 * time.Minute,
+			expectedEstDuration:   42 * time.Minute,
+			expectedEstToComplete: 12 * time.Minute,
+		},
+		{
+			name:                  "exact minutes - negative 47m (past estimate)",
+			startedAt:             metav1.NewTime(now.Add(-90 * time.Minute)),
+			estimatedDuration:     43 * time.Minute,
+			expectedEstDuration:   43 * time.Minute,
+			expectedEstToComplete: -47 * time.Minute,
+		},
+		{
+			name:                  "duration with seconds > 10m rounds to minutes",
+			startedAt:             now,
+			estimatedDuration:     15*time.Minute + 30*time.Second,
+			expectedEstDuration:   16 * time.Minute,
+			expectedEstToComplete: 16 * time.Minute,
+		},
+		{
+			name:                  "duration with milliseconds < 10m rounds to seconds",
+			startedAt:             now,
+			estimatedDuration:     5*time.Minute + 500*time.Millisecond,
+			expectedEstDuration:   5*time.Minute + 1*time.Second,
+			expectedEstToComplete: 5*time.Minute + 1*time.Second,
+		},
+		{
+			name:                "negative remaining time < -10m rounds to minutes",
+			startedAt:           metav1.NewTime(now.Add(-30 * time.Minute)),
+			estimatedDuration:   15*time.Minute + 30*time.Second,
+			expectedEstDuration: 16 * time.Minute,
+			// (now-30m)+16m = now-14m, started with 15m30s rounds to 16m, so -14m30s rounds to -15m
+			expectedEstToComplete: -15 * time.Minute,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			insight := cvInsight.DeepCopy()
-			insight.StartedAt = started
-			insight.EstimatedCompletedAt = ptr.To(metav1.NewTime(started.Add(estimated)))
+			insight.StartedAt = tc.startedAt
+			insight.EstimatedCompletedAt = ptr.To(metav1.NewTime(tc.startedAt.Add(tc.estimatedDuration)))
 
 			controlPlaneStatus := assessControlPlaneStatus(insight, nil, now.Time)
-			if controlPlaneStatus.EstDuration != estimated {
-				t.Errorf("Expected estimated duration %s, got %s", estimated, controlPlaneStatus.EstDuration)
+			if controlPlaneStatus.EstDuration != tc.expectedEstDuration {
+				t.Errorf("Expected estimated duration %s, got %s", tc.expectedEstDuration, controlPlaneStatus.EstDuration)
 			}
 
-			expected := started.Add(estimated).Sub(now.Time)
-			if controlPlaneStatus.EstTimeToComplete != expected {
-				t.Errorf("Expected estimated time to complete %s, got %s", expected, controlPlaneStatus.EstTimeToComplete)
+			if controlPlaneStatus.EstTimeToComplete != tc.expectedEstToComplete {
+				t.Errorf(
+					"Expected estimated time to complete %s, got %s",
+					tc.expectedEstToComplete,
+					controlPlaneStatus.EstTimeToComplete,
+				)
 			}
 		})
 	}
