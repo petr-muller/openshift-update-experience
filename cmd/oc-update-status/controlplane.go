@@ -170,13 +170,21 @@ func (d *controlPlaneStatusDisplayData) Write(f io.Writer, detailed bool, now ti
 				reason = "-"
 			}
 			// Split message by newlines and indent continuation lines
-			lines := strings.Split(o.Condition.Message, "\n")
-			for i, line := range lines {
-				if i == 0 {
+			// Trim trailing newlines to avoid empty lines at the end
+			msg := strings.TrimRight(o.Condition.Message, "\n")
+			lines := strings.Split(msg, "\n")
+			isFirstLine := true
+			for _, line := range lines {
+				// Skip empty lines to avoid confusing output
+				if line == "" {
+					continue
+				}
+				if isFirstLine {
 					// First line: write all columns
 					_, _ = table.Write([]byte(o.Name + "\t"))
 					_, _ = table.Write([]byte(shortDuration(now.Sub(o.Condition.LastTransitionTime.Time)) + "\t"))
 					_, _ = table.Write([]byte(reason + "\t"))
+					isFirstLine = false
 				} else {
 					// Continuation lines: empty columns for proper indentation
 					_, _ = table.Write([]byte("\t\t\t"))

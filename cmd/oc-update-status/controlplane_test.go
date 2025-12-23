@@ -461,6 +461,85 @@ func TestControlPlaneStatusDisplayDataWrite_UpdatingOperatorsTable(t *testing.T)
 				"                             Upgrading coredns",
 			},
 		},
+		{
+			name: "operator with trailing newlines in message",
+			updatingOperators: []operator{
+				{
+					Name: "authentication",
+					Condition: metav1.Condition{
+						Type:   string(v1alpha1.ClusterOperatorProgressInsightUpdating),
+						Status: metav1.ConditionTrue,
+						Reason: "Progressing",
+						Message: "Updating authentication operator\n" +
+							"Redeploying pods\n\n\n",
+						LastTransitionTime: metav1.NewTime(now.Add(-30 * time.Second)),
+					},
+				},
+			},
+			expectLines: []string{
+				"NAME             SINCE   REASON        MESSAGE",
+				"authentication   30s     Progressing   Updating authentication operator",
+				"                                       Redeploying pods",
+			},
+		},
+		{
+			name: "operator with empty lines in middle of message",
+			updatingOperators: []operator{
+				{
+					Name: "network",
+					Condition: metav1.Condition{
+						Type:               string(v1alpha1.ClusterOperatorProgressInsightUpdating),
+						Status:             metav1.ConditionTrue,
+						Reason:             "Updating",
+						Message:            "Starting network update\n\nConfiguring network policies\n\nFinishing update",
+						LastTransitionTime: metav1.NewTime(now.Add(-2 * time.Minute)),
+					},
+				},
+			},
+			expectLines: []string{
+				"NAME      SINCE   REASON     MESSAGE",
+				"network   2m      Updating   Starting network update",
+				"                             Configuring network policies",
+				"                             Finishing update",
+			},
+		},
+		{
+			name: "operator with single line message",
+			updatingOperators: []operator{
+				{
+					Name: "console",
+					Condition: metav1.Condition{
+						Type:               string(v1alpha1.ClusterOperatorProgressInsightUpdating),
+						Status:             metav1.ConditionTrue,
+						Reason:             "Rolling",
+						Message:            "Rolling out console deployment",
+						LastTransitionTime: metav1.NewTime(now.Add(-45 * time.Second)),
+					},
+				},
+			},
+			expectLines: []string{
+				"NAME      SINCE   REASON    MESSAGE",
+				"console   45s     Rolling   Rolling out console deployment",
+			},
+		},
+		{
+			name: "operator with empty message",
+			updatingOperators: []operator{
+				{
+					Name: "monitoring",
+					Condition: metav1.Condition{
+						Type:               string(v1alpha1.ClusterOperatorProgressInsightUpdating),
+						Status:             metav1.ConditionTrue,
+						Reason:             "Progressing",
+						Message:            "",
+						LastTransitionTime: metav1.NewTime(now.Add(-15 * time.Second)),
+					},
+				},
+			},
+			expectLines: []string{
+				"NAME   SINCE   REASON   MESSAGE",
+			},
+		},
 	}
 
 	for _, tc := range testCases {
