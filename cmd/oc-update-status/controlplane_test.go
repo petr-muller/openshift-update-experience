@@ -438,6 +438,29 @@ func TestControlPlaneStatusDisplayDataWrite_UpdatingOperatorsTable(t *testing.T)
 				"test-operator-3   15m45s   OperatorGoesBrrr   Operator goes brrr",
 			},
 		},
+		{
+			name: "operator with multiline message",
+			updatingOperators: []operator{
+				{
+					Name: "dns",
+					Condition: metav1.Condition{
+						Type:   string(v1alpha1.ClusterOperatorProgressInsightUpdating),
+						Status: metav1.ConditionTrue,
+						Reason: "Progressing",
+						Message: "Progressing=True: DNS \"default\" reports Progressing=True\n" +
+							"Upgrading operator to \"4.22.0\"\n" +
+							"Upgrading coredns",
+						LastTransitionTime: metav1.NewTime(now.Add(-1*time.Minute - 45*time.Second)),
+					},
+				},
+			},
+			expectLines: []string{
+				"NAME   SINCE   REASON        MESSAGE",
+				"dns    1m45s   Progressing   Progressing=True: DNS \"default\" reports Progressing=True",
+				"                             Upgrading operator to \"4.22.0\"",
+				"                             Upgrading coredns",
+			},
+		},
 	}
 
 	for _, tc := range testCases {
