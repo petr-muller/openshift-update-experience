@@ -360,7 +360,23 @@ func determineConditions(pool *openshiftmachineconfigurationv1.MachineConfigPool
 	// Use meta.SetStatusCondition to properly handle LastTransitionTime
 	// It only updates LastTransitionTime when the status actually changes
 	meta.SetStatusCondition(&conditions, updating)
-	meta.SetStatusCondition(&conditions, available)
+
+	// Handle Available condition: if we manually set LastTransitionTime from GetUnavailableSince(),
+	// we need to manually manage it instead of using meta.SetStatusCondition
+	if isUnavailable && !isUpdating {
+		// Remove existing Available condition and add our manually-timestamped one
+		var filteredConditions []metav1.Condition
+		for _, c := range conditions {
+			if c.Type != string(ouev1alpha1.NodeStatusInsightAvailable) {
+				filteredConditions = append(filteredConditions, c)
+			}
+		}
+		filteredConditions = append(filteredConditions, available)
+		conditions = filteredConditions
+	} else {
+		meta.SetStatusCondition(&conditions, available)
+	}
+
 	meta.SetStatusCondition(&conditions, degraded)
 
 	return conditions, message, estimate
