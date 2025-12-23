@@ -340,8 +340,14 @@ func determineConditions(pool *openshiftmachineconfigurationv1.MachineConfigPool
 		// TODO: Reason should be more informative (e.g., specific unavailability type) but we will handle that in the future
 		available.Reason = "Unavailable"
 		available.Message = lns.GetUnavailableMessage()
-		// Preserve the actual unavailability time from node state, stripping monotonic clock
-		available.LastTransitionTime = metav1.Time{Time: lns.GetUnavailableSince().Truncate(0)}
+		// Preserve the actual unavailability time from node state, stripping monotonic clock.
+		// If the unavailability time is not known (zero value), fall back to the current time
+		unavailableSince := lns.GetUnavailableSince()
+		if unavailableSince.IsZero() {
+			available.LastTransitionTime = now
+		} else {
+			available.LastTransitionTime = metav1.Time{Time: unavailableSince.Truncate(0)}
+		}
 		message = available.Message
 	}
 
@@ -361,8 +367,16 @@ func determineConditions(pool *openshiftmachineconfigurationv1.MachineConfigPool
 	// It only updates LastTransitionTime when the status actually changes
 	meta.SetStatusCondition(&conditions, updating)
 
-	// Handle Available condition: if we manually set LastTransitionTime from GetUnavailableSince(),
-	// we need to manually manage it instead of using meta.SetStatusCondition
+	// Handle Available condition: When a node is unavailable, we manually set LastTransitionTime
+	// to preserve the actual unavailability timestamp from GetUnavailableSince() (the time when
+	// the node actually became unavailable according to the Machine Config Operator).
+	// This is more accurate than using meta.SetStatusCondition, which would set it to the time
+	// we first detected the unavailability in our reconciliation loop.
+	//
+	// We cannot use meta.SetStatusCondition when we've manually set LastTransitionTime because
+	// it manages that field automatically and would either overwrite our timestamp or cause
+	// unnecessary updates. Therefore, we manually manage the Available condition in this case
+	// by removing any existing Available condition and appending our manually-timestamped one.
 	if isUnavailable && !isUpdating {
 		// Remove existing Available condition and add our manually-timestamped one
 		var filteredConditions []metav1.Condition
