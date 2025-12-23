@@ -537,7 +537,8 @@ func TestControlPlaneStatusDisplayDataWrite_UpdatingOperatorsTable(t *testing.T)
 				},
 			},
 			expectLines: []string{
-				"NAME   SINCE   REASON   MESSAGE",
+				"NAME         SINCE   REASON        MESSAGE",
+				"monitoring   15s     Progressing",
 			},
 		},
 	}

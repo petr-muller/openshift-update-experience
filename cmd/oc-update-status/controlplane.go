@@ -172,6 +172,16 @@ func (d *controlPlaneStatusDisplayData) Write(f io.Writer, detailed bool, now ti
 			// Split message by newlines and indent continuation lines
 			// Trim trailing newlines to avoid empty lines at the end
 			msg := strings.TrimRight(o.Condition.Message, "\n")
+
+			// Handle empty message - still write the operator row but with empty message
+			if msg == "" {
+				_, _ = table.Write([]byte(o.Name + "\t"))
+				_, _ = table.Write([]byte(shortDuration(now.Sub(o.Condition.LastTransitionTime.Time)) + "\t"))
+				_, _ = table.Write([]byte(reason + "\t"))
+				_, _ = table.Write([]byte("\n"))
+				continue
+			}
+
 			lines := strings.Split(msg, "\n")
 			isFirstLine := true
 			for _, line := range lines {
