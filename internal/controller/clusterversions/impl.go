@@ -295,7 +295,8 @@ func assessClusterVersion(
 		toLastObservedProgress := insight.LastObservedProgress.Sub(startedAt.Time)
 		updatingFor := now.Sub(startedAt.Time)
 		estimated := estimateCompletion(historyBaseline, toLastObservedProgress, updatingFor, coCompletion)
-		insight.EstimatedCompletedAt = ptr.To(metav1.NewTime(now.Add(estimated)))
+		// Strip monotonic clock component to avoid unnecessary updates when comparing with API server values
+		insight.EstimatedCompletedAt = ptr.To(metav1.NewTime(now.Add(estimated).Truncate(0)))
 	}
 
 	if oldUpdating := meta.FindStatusCondition(previous.Conditions, updating.Type); oldUpdating != nil {
