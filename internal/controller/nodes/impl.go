@@ -159,7 +159,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	// Update status
-	logger.Info(diff)
+	logger.WithValues("NodeProgressInsight", req.NamespacedName).Info(diff)
 	progressInsight.Status = *nodeInsight
 	if err := r.Status().Update(ctx, &progressInsight); err != nil {
 		logger.WithValues("NodeProgressInsight", req.NamespacedName).Error(err, "Failed to update NodeProgressInsight status")
@@ -340,7 +340,8 @@ func determineConditions(pool *openshiftmachineconfigurationv1.MachineConfigPool
 		// TODO: Reason should be more informative (e.g., specific unavailability type) but we will handle that in the future
 		available.Reason = "Unavailable"
 		available.Message = lns.GetUnavailableMessage()
-		available.LastTransitionTime = metav1.Time{Time: lns.GetUnavailableSince()}
+		// Preserve the actual unavailability time from node state, stripping monotonic clock
+		available.LastTransitionTime = metav1.Time{Time: lns.GetUnavailableSince().Truncate(0)}
 		message = available.Message
 	}
 

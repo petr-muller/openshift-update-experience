@@ -143,6 +143,11 @@ var _ = Describe("NodeProgressInsight Controller", Serial, func() {
 								"node-role.kubernetes.io/worker": "",
 							},
 						},
+						Configuration: mcfgv1.MachineConfigPoolStatusConfiguration{
+							ObjectReference: corev1.ObjectReference{
+								Name: "rendered-worker-123",
+							},
+						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, mcp)).To(Succeed())
