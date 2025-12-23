@@ -96,7 +96,7 @@ Operator Health: {{ .Operators.StatusSummary }}
 `
 
 func roundDuration(d time.Duration) time.Duration {
-	// Use absolute value for comparison to handle negative durations correctly
+	// Round durations with magnitude greater than 10 minutes to the nearest minute
 	if d > 10*time.Minute || d < -10*time.Minute {
 		return d.Round(time.Minute)
 	}
