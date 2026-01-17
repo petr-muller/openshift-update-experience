@@ -371,3 +371,228 @@ All technical unknowns have been resolved:
 5. **Tracing**: Structured logging with correlation IDs
 6. **Code reuse**: Extract existing assessment logic to nodestate package
 7. **Lifecycle**: Implement manager.Runnable for proper shutdown
+
+---
+
+# Followup Research: Legacy Mode Removal
+
+**Date**: 2026-01-17
+**Phase**: Followup refactoring (removing dual-mode architecture)
+
+## Followup Research Question 1: Automatic Controller Enablement Patterns
+
+### Decision
+Use simple boolean conditional in main.go before controller setup: `enableNodeState := controllers.enableNode`
+
+### Rationale
+- ✅ Simple and transparent (visible in main.go setup logic)
+- ✅ No framework magic or hidden dependencies
+- ✅ Easy to debug (log message explains why controller was enabled)
+- ✅ Follows existing controller-runtime patterns (explicit setup order)
+
+### Implementation Pattern
+
+```go
+// Automatic dependency enablement
+enableNodeState := controllers.enableNode
+if enableNodeState {
+    setupLog.Info("CentralNodeState controller auto-enabled",
+        "reason", "NodeProgressInsight controller is enabled")
+}
+```
+
+**Note**: No MCP Progress Controller logic included. That controller does not exist yet and will be handled in future work.
+
+### Alternatives Considered
+
+| Alternative | Rejected Because |
+|-------------|------------------|
+| Dependency injection framework | Too heavyweight for single use case |
+| Manager extension with dependency tracking | Would require custom manager wrapper, too complex |
+| Environment variable | Less discoverable than command-line flag logic |
+
+---
+
+## Followup Research Question 2: Flag Removal Migration
+
+### Decision
+Remove `--enable-node-state-controller` flag entirely with documented breaking change.
+
+### Rationale
+- Spec explicitly states "breaking change acceptable"
+- Standard practice for refactoring work
+- Clean codebase with no legacy compatibility code
+- Migration is simple: remove flag from deployment configs
+
+### Go Flag Package Behavior
+Go's flag.Parse() returns error "flag provided but not defined" for unknown flags. Users providing the removed flag will get a clear error on startup.
+
+### Migration Documentation Required
+
+```markdown
+## Breaking Change: --enable-node-state-controller Removed
+
+The `--enable-node-state-controller` flag has been removed. The Central Node State
+Controller is now automatically enabled when the NodeProgressInsight controller is
+enabled via `--enable-node-controller=true`.
+
+**Migration**: Remove `--enable-node-state-controller` from deployment configurations.
+No other changes required.
+```
+
+### Alternatives Considered
+
+| Alternative | Rejected Because |
+|-------------|------------------|
+| Dummy flag with deprecation warning | Adds unnecessary code complexity |
+| Silently ignore unknown flags | Would require custom flag parsing |
+
+---
+
+## Followup Research Question 3: Error Handling for Missing Dependency
+
+### Decision
+Fail fast in main.go setup logic with explicit nil check after automatic enablement, before NodeProgressInsight setup.
+
+### Implementation Pattern
+
+```go
+if controllers.enableNode {
+    if centralNodeState == nil {
+        setupLog.Error(nil, "NodeProgressInsight controller requires CentralNodeState controller",
+            "required-by", "NodeProgressInsight",
+            "missing", "CentralNodeState",
+            "fix", "This is a bug in automatic enablement logic")
+        os.Exit(1)
+    }
+    nodeInformer := controller.NewNodeProgressInsightReconcilerWithProvider(
+        mgr.GetClient(),
+        mgr.GetScheme(),
+        centralNodeState.GetStateProvider(),
+    )
+    if err = nodeInformer.SetupWithManager(mgr); err != nil {
+        setupLog.Error(err, "unable to create controller", "controller", "NodeProgressInsight")
+        os.Exit(1)
+    }
+}
+```
+
+### Additional Safety: Constructor Validation
+
+```go
+func NewNodeProgressInsightReconcilerWithProvider(
+    client client.Client,
+    scheme *runtime.Scheme,
+    provider nodestate.NodeStateProvider,
+) *NodeProgressInsightReconciler {
+    if provider == nil {
+        // This should never happen due to main.go check, but defensive
+        panic("NodeProgressInsightReconciler requires non-nil NodeStateProvider")
+    }
+    return &NodeProgressInsightReconciler{
+        Client:        client,
+        Scheme:        scheme,
+        stateProvider: provider,
+    }
+}
+```
+
+### Rationale
+- ✅ Fails immediately during manager setup (before manager starts)
+- ✅ Clear error message identifies missing dependency
+- ✅ Logs suggest root cause ("bug in automatic enablement logic")
+- ✅ No runtime errors or reconciliation failures
+
+### Alternatives Considered
+
+| Alternative | Rejected Because |
+|-------------|------------------|
+| Silent degradation | Would hide bugs in automatic enablement |
+| Runtime error in Reconcile | Harder to debug, continuous failures |
+| Constructor validation only | Would panic, less clear error message |
+
+---
+
+## Followup Research Question 4: Test Coverage Verification
+
+### Decision
+Use phased test migration: audit → verify → validate
+
+### Phased Approach
+
+1. **Pre-deletion audit** (before removing any code):
+   - Run `go test -cover` on current codebase
+   - Document baseline coverage percentage
+   - List all test cases in legacy mode
+
+2. **Verification** (during refactoring):
+   - Ensure provider mode tests cover 100% of functional scenarios
+   - Add missing provider mode tests if needed
+   - Target: No coverage decrease for provider mode code paths
+
+3. **Post-deletion validation**:
+   - Run `make test` after legacy mode removal
+   - Verify all tests pass
+   - Compare coverage percentage (should be equal or higher)
+
+### Coverage Analysis
+
+**Legacy mode test cases to audit**:
+- ✅ Node state evaluation: Covered by central controller tests (nodestate package)
+- ✅ Status updates: Covered by provider mode integration tests
+- ✅ Watch setup: Covered by provider mode (SetupWithManager unchanged)
+- ⚠️ **Standalone reconciliation**: Legacy mode reconciles independently; provider mode uses central controller (intentionally removed)
+
+**Coverage gate**: `make test` must pass with no failing tests after legacy mode removal.
+
+### Alternatives Considered
+
+| Alternative | Rejected Because |
+|-------------|------------------|
+| No formal audit | Risky, might miss test coverage gaps |
+| Convert legacy tests to provider tests | Unnecessary duplication, provider tests already exist |
+| Keep legacy tests as "defense in depth" | Would test non-existent code path |
+
+---
+
+## Followup Summary
+
+### Key Decisions for Refactoring
+
+| Research Question | Decision | Rationale |
+|------------------|----------|-----------|
+| Automatic enablement pattern | Simple conditional in main.go | Transparent, debuggable, follows controller-runtime patterns |
+| Flag removal handling | Remove entirely, document breaking change | Clean removal, spec allows breaking changes |
+| Missing dependency error | Fail fast in main.go setup | Clear error message, fails before manager starts |
+| Test coverage verification | Phased audit → verify → validate | Ensures no coverage loss, systematic approach |
+
+### Implementation Checklist
+
+From research findings, the followup refactoring requires:
+
+- [ ] Add automatic enablement logic before controller setup
+- [ ] Add nil check for central controller before NodeProgressInsight setup
+- [ ] Remove `--enable-node-state-controller` flag declaration
+- [ ] Remove `enableNodeState` from controllersConfig struct
+- [ ] Remove legacy constructor `NewNodeProgressInsightReconciler`
+- [ ] Remove `impl` field from NodeProgressInsightReconciler
+- [ ] Add nil check in `NewNodeProgressInsightReconcilerWithProvider` constructor
+- [ ] Audit provider mode test coverage before removing legacy tests
+- [ ] Remove legacy mode test cases
+- [ ] Document breaking change in CLAUDE.md or migration guide
+- [ ] Validate `make test` passes after all changes
+
+### Open Questions (Resolved)
+
+1. **MCP Progress Controller flag**: ✅ RESOLVED
+   - **Decision**: Do NOT include any MCP Progress Controller logic
+   - **Rationale**: Controller does not exist yet, will be handled in future work
+   - **Code**: `enableNodeState := controllers.enableNode`
+
+2. **Flag deprecation warning**: ✅ RESOLVED
+   - **Decision**: Remove flag entirely, no backward compatibility needed
+   - **Rationale**: Still in development phase, clean removal is better
+
+3. **Provider nil check location**: ✅ RESOLVED
+   - **Decision**: Both constructor AND main.go
+   - **Rationale**: Primary check in main.go (clear error), defensive check in constructor (panic)

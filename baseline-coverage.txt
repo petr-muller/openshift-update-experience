@@ -1,0 +1,5 @@
+ok  	github.com/petr-muller/openshift-update-experience/internal/controller	6.299s	coverage: 49.5% of statements
+ok  	github.com/petr-muller/openshift-update-experience/internal/controller/clusteroperators	0.013s	coverage: 46.0% of statements
+ok  	github.com/petr-muller/openshift-update-experience/internal/controller/clusterversions	0.016s	coverage: 52.0% of statements
+ok  	github.com/petr-muller/openshift-update-experience/internal/controller/nodes	0.072s	coverage: 12.8% of statements
+ok  	github.com/petr-muller/openshift-update-experience/internal/controller/nodestate	0.357s	coverage: 83.7% of statements
