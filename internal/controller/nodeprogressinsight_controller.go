@@ -24,6 +24,7 @@ import (
 	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
 	"github.com/petr-muller/openshift-update-experience/internal/clusterversions"
 	"github.com/petr-muller/openshift-update-experience/internal/controller/nodes"
+	"github.com/petr-muller/openshift-update-experience/internal/controller/nodestate"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // NodeProgressInsightReconciler reconciles a NodeProgressInsight object
@@ -39,16 +41,31 @@ type NodeProgressInsightReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
+	// impl is the legacy reconciler used when no state provider is available
 	impl *nodes.Reconciler
+
+	// stateProvider is the central node state provider (when available)
+	stateProvider nodestate.NodeStateProvider
 }
 
-// NewNodeProgressInsightReconciler creates a new NodeProgressInsightReconciler
+// NewNodeProgressInsightReconciler creates a new NodeProgressInsightReconciler in legacy mode
+// (without central state provider). This mode is used when the central controller is disabled.
 func NewNodeProgressInsightReconciler(client client.Client, scheme *runtime.Scheme) *NodeProgressInsightReconciler {
 	return &NodeProgressInsightReconciler{
 		Client: client,
 		Scheme: scheme,
+		impl:   nodes.NewReconciler(client, scheme),
+	}
+}
 
-		impl: nodes.NewReconciler(client, scheme),
+// NewNodeProgressInsightReconcilerWithProvider creates a NodeProgressInsightReconciler that uses
+// the central state provider for node state. This is the preferred mode when the central
+// controller is enabled.
+func NewNodeProgressInsightReconcilerWithProvider(client client.Client, scheme *runtime.Scheme, provider nodestate.NodeStateProvider) *NodeProgressInsightReconciler {
+	return &NodeProgressInsightReconciler{
+		Client:        client,
+		Scheme:        scheme,
+		stateProvider: provider,
 	}
 }
 
@@ -62,15 +79,89 @@ func NewNodeProgressInsightReconciler(client client.Client, scheme *runtime.Sche
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the NodeProgressInsight object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
+//
+// When using the central state provider, this method reads pre-computed node state
+// and updates the CRD status. In legacy mode, it delegates to the impl reconciler
+// which performs its own state evaluation.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.4/pkg/reconcile
 func (r *NodeProgressInsightReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	return r.impl.Reconcile(ctx, req)
+	// Use legacy mode if no state provider is configured
+	if r.stateProvider == nil {
+		return r.impl.Reconcile(ctx, req)
+	}
+
+	// Provider mode: read state from central controller and update CRD
+	return r.reconcileWithProvider(ctx, req)
+}
+
+// reconcileWithProvider implements reconciliation using the central state provider.
+// This reads pre-computed node state and copies it to the NodeProgressInsight CRD.
+func (r *NodeProgressInsightReconciler) reconcileWithProvider(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := ctrl.LoggerFrom(ctx)
+
+	// Get the node state from central provider
+	state, found := r.stateProvider.GetNodeState(req.Name)
+	if !found {
+		// Node state not tracked - might be deleted or not belong to any MCP
+		// Try to clean up any existing insight
+		var insight ouev1alpha1.NodeProgressInsight
+		if err := r.Get(ctx, req.NamespacedName, &insight); err != nil {
+			// Insight doesn't exist either - nothing to do
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+		// Delete the insight since node state is gone
+		logger.Info("Deleting NodeProgressInsight for untracked node")
+		return ctrl.Result{}, r.Delete(ctx, &insight)
+	}
+
+	// Ensure the NodeProgressInsight CRD exists
+	var insight ouev1alpha1.NodeProgressInsight
+	if err := r.Get(ctx, req.NamespacedName, &insight); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			return ctrl.Result{}, err
+		}
+		// Create the insight
+		insight.Name = req.Name
+		if err := r.Create(ctx, &insight); err != nil {
+			logger.Error(err, "Failed to create NodeProgressInsight")
+			return ctrl.Result{}, err
+		}
+		logger.Info("Created NodeProgressInsight")
+	}
+
+	// Copy state to insight status
+	newStatus := nodeStateToInsightStatus(state)
+
+	// Check if status update is needed (compare hashes or use deep equal)
+	// For simplicity, we always update - controller-runtime handles no-ops
+	insight.Status = *newStatus
+	if err := r.Status().Update(ctx, &insight); err != nil {
+		logger.Error(err, "Failed to update NodeProgressInsight status")
+		return ctrl.Result{}, err
+	}
+
+	logger.V(4).Info("Updated NodeProgressInsight status from central state",
+		"phase", state.Phase,
+		"version", state.Version,
+	)
+
+	return ctrl.Result{}, nil
+}
+
+// nodeStateToInsightStatus converts internal NodeState to CRD status
+func nodeStateToInsightStatus(state *nodestate.NodeState) *ouev1alpha1.NodeProgressInsightStatus {
+	return &ouev1alpha1.NodeProgressInsightStatus{
+		Name:         state.Name,
+		PoolResource: state.PoolRef,
+		Scope:        state.Scope,
+		Version:      state.Version,
+		Message:      state.Message,
+		Conditions:   state.Conditions,
+		// EstimatedToComplete is computed by the central evaluator and stored in state
+		// If needed, add it to NodeState
+	}
 }
 
 var mcpDeleted = predicate.Funcs{
@@ -114,7 +205,35 @@ var mcVersionEvents = predicate.Funcs{
 }
 
 // SetupWithManager sets up the controller with the Manager.
+// When using a state provider, watches the NodeInsightChannel for notifications.
+// In legacy mode, watches Node, MCP, MC, and CV resources directly.
 func (r *NodeProgressInsightReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// When using central state provider, watch the notification channel
+	if r.stateProvider != nil {
+		return r.setupWithProvider(mgr)
+	}
+
+	// Legacy mode: watch resources directly
+	return r.setupLegacy(mgr)
+}
+
+// setupWithProvider configures the controller to watch the central state provider's channel.
+func (r *NodeProgressInsightReconciler) setupWithProvider(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&ouev1alpha1.NodeProgressInsight{}).
+		Named("nodeprogressinsight").
+		// Watch the notification channel from central controller
+		WatchesRawSource(
+			source.Channel(
+				r.stateProvider.NodeInsightChannel(),
+				&handler.EnqueueRequestForObject{},
+			),
+		).
+		Complete(r)
+}
+
+// setupLegacy configures the controller with direct resource watches (legacy mode).
+func (r *NodeProgressInsightReconciler) setupLegacy(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ouev1alpha1.NodeProgressInsight{}).
 		Named("nodeprogressinsight").

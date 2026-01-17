@@ -78,14 +78,41 @@ Each controller:
 - Reconciles when changes occur
 - Updates corresponding ProgressInsight CRD status
 
+#### Central Node State Controller (NEW)
+
+The **CentralNodeStateController** provides centralized node state evaluation:
+- **Purpose**: Evaluates node update state once and provides consistent snapshots to downstream controllers
+- **Location**: `internal/controller/nodestate/` package
+- **Benefits**:
+  - Single evaluation per node change (reduces redundant processing)
+  - Consistent state across all downstream consumers
+  - Notification channels for reactive updates via `source.Channel`
+  - Graceful degradation (works with 0 to N downstream controllers)
+- **Architecture**:
+  - Evaluates node state in `Reconcile()` and stores in thread-safe `NodeStateStore`
+  - Downstream controllers read via `NodeStateProvider` interface
+  - Notifications sent via buffered channels (1024 buffer) on state changes
+  - Implements `manager.Runnable` for lifecycle management
+- **Observability**:
+  - Prometheus metrics for evaluation duration, notification performance, node counts by phase
+  - Structured logging with correlation IDs (node, resourceVersion, operation, pool)
+- **Modes**:
+  - **Provider mode** (default): NodeProgressInsight uses central controller's state
+  - **Legacy mode**: NodeProgressInsight evaluates state independently (backwards compatibility)
+
 ### Key Internal Packages
 
+- **internal/controller/nodestate/** - **Central node state controller (NEW)**
+  - `impl.go` - Central controller with state evaluation and notification
+  - `state.go` - NodeState struct, UpdatePhase constants, NodeStateStore
+  - `assess.go` - Node state evaluation logic (extracted from nodes controller)
+  - `conditions.go` - Condition determination logic
+  - `caches.go` - MCP selector and MC version caches
+  - `metrics.go` - Prometheus metrics for observability
+  - `*_test.go` - Comprehensive test coverage (83.4%)
 - **internal/controller/{clusterversions,clusteroperators,nodes}** - Controller implementation logic
   - `impl.go` - Main reconciliation logic
   - `impl_test.go` - Unit tests
-- **internal/controller/nodes/** - Additional node controller components:
-  - `mcpselectorcache.go` - Caches MachineConfigPool selectors for node->pool mapping
-  - `mcversioncache.go` - Caches MachineConfig->version mappings
 - **internal/health/** - Health assessment logic for insights
 - **internal/mco/** - Constants for Machine Config Operator states (daemon, pool states)
 - **internal/clusteroperators/** - ClusterOperator-specific utilities
@@ -125,7 +152,32 @@ The plugin reads ProgressInsight CRDs and formats them for display:
 
 ### Controller Flags
 The controller manager supports:
-- `--enable-cluster-version-controller` (default: true)
-- `--enable-cluster-operator-controller` (default: true)
-- `--enable-node-controller` (default: true)
+- `--enable-cluster-version-controller` (default: true) - ClusterVersion progress tracking
+- `--enable-cluster-operator-controller` (default: true) - ClusterOperator progress tracking
+- `--enable-node-controller` (default: true) - NodeProgressInsight controller
+- `--enable-node-state-controller` (default: true) - **NEW** Central node state controller
+  - When enabled: NodeProgressInsight uses provider mode (reads from central controller)
+  - When disabled: NodeProgressInsight uses legacy mode (evaluates state independently)
 - Standard controller-runtime flags (metrics, leader election, etc.)
+
+### Metrics (Central Node State Controller)
+
+The central controller exposes Prometheus metrics:
+- `openshift_update_experience_central_node_state_evaluation_duration_seconds` - Node state evaluation duration (histogram)
+- `openshift_update_experience_central_node_state_evaluation_total` - Total evaluations by pool and result (counter)
+- `openshift_update_experience_central_node_state_notification_duration_seconds` - Downstream notification duration (histogram)
+- `openshift_update_experience_central_node_state_active_nodes` - Number of tracked nodes (gauge)
+- `openshift_update_experience_central_node_state_nodes_by_phase` - Nodes grouped by update phase (gauge)
+
+## Active Technologies
+- Go 1.24+ (go 1.24.4 toolchain, godebug default=go1.23) + controller-runtime v0.x, client-go, Kubebuilder v4, OpenShift API types (MachineConfigPool, MachineConfig, ClusterVersion) (001-central-node-state-controller)
+- In-memory state only (sync.Map for thread-safe caching); CRDs persisted via Kubernetes API (001-central-node-state-controller)
+
+## Recent Changes
+- **Central Node State Controller** (2025-01): Implemented centralized node state evaluation controller
+  - New package: `internal/controller/nodestate/` with 13 files, 83.4% test coverage
+  - Single evaluation per node change, consistent state snapshots for all downstream controllers
+  - Notification channels for reactive updates, graceful degradation (0 to N consumers)
+  - Full observability: Prometheus metrics + structured logging with correlation IDs
+  - Provider/legacy mode support for backwards compatibility
+  - Implements manager.Runnable for proper lifecycle management
