@@ -172,6 +172,8 @@ The central controller exposes Prometheus metrics:
 ## Active Technologies
 - Go 1.24+ (go 1.24.4 toolchain, godebug default=go1.23) + controller-runtime v0.x, client-go, Kubebuilder v4, OpenShift API types (MachineConfigPool, MachineConfig, ClusterVersion) (001-central-node-state-controller)
 - In-memory state only (sync.Map for thread-safe caching); CRDs persisted via Kubernetes API (001-central-node-state-controller)
+- Go 1.24.4 (godebug default=go1.23) (001-central-node-state-controller)
+- In-memory only (sync.Map for central controller state cache) (001-central-node-state-controller)
 
 ## Recent Changes
 - **Central Node State Controller** (2025-01): Implemented centralized node state evaluation controller
