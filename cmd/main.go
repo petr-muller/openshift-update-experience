@@ -63,6 +63,7 @@ type controllersConfig struct {
 	enableClusterVersion  bool
 	enableClusterOperator bool
 	enableNode            bool
+	enableNodeState       bool
 }
 
 // nolint:gocyclo
@@ -99,6 +100,8 @@ func main() {
 		"Enable the ClusterOperatorProgressInsight controller")
 	flag.BoolVar(&controllers.enableNode, "enable-node-controller", true,
 		"Enable the NodeProgressInsight controller")
+	flag.BoolVar(&controllers.enableNodeState, "enable-node-state-controller", true,
+		"Enable the CentralNodeState controller (provides centralized node state evaluation)")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -242,9 +245,34 @@ func main() {
 		setupLog.Info("ClusterOperatorProgressInsight controller disabled")
 	}
 
+	// CentralNodeState controller must be set up first if enabled, as it provides
+	// the NodeStateProvider for downstream controllers
+	var centralNodeState *controller.CentralNodeStateReconciler
+	if controllers.enableNodeState {
+		setupLog.Info("Setting up CentralNodeState controller")
+		centralNodeState = controller.NewCentralNodeStateReconciler(mgr.GetClient())
+		if err = centralNodeState.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "CentralNodeState")
+			os.Exit(1)
+		}
+	} else {
+		setupLog.Info("CentralNodeState controller disabled")
+	}
+
 	if controllers.enableNode {
 		setupLog.Info("Setting up NodeProgressInsight controller")
-		nodeInformer := controller.NewNodeProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())
+		var nodeInformer *controller.NodeProgressInsightReconciler
+		if centralNodeState != nil {
+			// Use the central state provider when available
+			nodeInformer = controller.NewNodeProgressInsightReconcilerWithProvider(
+				mgr.GetClient(),
+				mgr.GetScheme(),
+				centralNodeState.GetStateProvider(),
+			)
+		} else {
+			// Fall back to standalone mode (legacy behavior)
+			nodeInformer = controller.NewNodeProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())
+		}
 		if err = nodeInformer.SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "NodeProgressInsight")
 			os.Exit(1)

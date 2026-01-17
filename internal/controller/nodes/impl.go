@@ -11,6 +11,7 @@ import (
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
 	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
 	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
+	"github.com/petr-muller/openshift-update-experience/internal/controller/nodestate"
 	"github.com/petr-muller/openshift-update-experience/internal/mco"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -34,11 +35,11 @@ type Reconciler struct {
 	once sync.Once
 
 	// mcpSelectors caches the label selectors converted from the node selectors of the machine config pools by their names.
-	mcpSelectors machineConfigPoolSelectorCache
+	mcpSelectors nodestate.MachineConfigPoolSelectorCache
 
 	// machineConfigVersions caches machine config versions which stores the name of MC as the key
 	// and the release image version as its value retrieved from the annotation of the MC.
-	machineConfigVersions machineConfigVersionCache
+	machineConfigVersions nodestate.MachineConfigVersionCache
 
 	now func() metav1.Time
 }
@@ -98,7 +99,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 	}
 
-	mcpName := r.mcpSelectors.whichMCP(labels.Set(node.Labels))
+	mcpName := r.mcpSelectors.WhichMCP(labels.Set(node.Labels))
 	if mcpName == "" {
 		// Node doesn't belong to any MachineConfigPool - clean up stale insight if it exists
 		logger.WithValues("Node", req.NamespacedName).Info("Node does not belong to any MachineConfigPool")
@@ -149,7 +150,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	// When updating an existing insight, preserve existing conditions
 	existingConditions := progressInsight.Status.Conditions
-	nodeInsight := assessNode(&node, &mcp, r.machineConfigVersions.versionFor, mostRecentVersionInCVHistory, existingConditions, now)
+	nodeInsight := assessNode(&node, &mcp, r.machineConfigVersions.VersionFor, mostRecentVersionInCVHistory, existingConditions, now)
 
 	// Check if status update is needed
 	diff := cmp.Diff(&progressInsight.Status, nodeInsight)
@@ -224,7 +225,7 @@ func (r *Reconciler) initializeMachineConfigPools(ctx context.Context) error {
 
 	logger.WithValues("MachineConfigPools", len(machineConfigPools.Items)).Info("Ingesting MachineConfigPools to cache OCP versions")
 	for _, pool := range machineConfigPools.Items {
-		if ingested, message := r.mcpSelectors.ingest(pool.Name, pool.Spec.NodeSelector); ingested {
+		if ingested, message := r.mcpSelectors.Ingest(pool.Name, pool.Spec.NodeSelector); ingested {
 			logger.WithValues("MachineConfigPool", pool.Name).Info(message)
 		}
 	}
@@ -240,7 +241,7 @@ func (r *Reconciler) initializeMachineConfigVersions(ctx context.Context) error 
 	logger.WithValues("MachineConfigs", len(machineConfigs.Items)).Info("Ingesting MachineConfigs to cache OCP versions")
 
 	for _, mc := range machineConfigs.Items {
-		if ingested, message := r.machineConfigVersions.ingest(&mc); ingested {
+		if ingested, message := r.machineConfigVersions.Ingest(&mc); ingested {
 			logger.WithValues("MachineConfig", mc.Name).Info(message)
 		}
 	}
@@ -446,7 +447,7 @@ func (r *Reconciler) HandleDeletedMachineConfigPool(ctx context.Context, object 
 		return nil
 	}
 
-	if !r.mcpSelectors.forget(pool.Name) {
+	if !r.mcpSelectors.Forget(pool.Name) {
 		return nil
 	}
 
@@ -468,7 +469,7 @@ func (r *Reconciler) HandleMachineConfigPool(ctx context.Context, object client.
 		return nil
 	}
 
-	modified, reason := r.mcpSelectors.ingest(pool.Name, pool.Spec.NodeSelector)
+	modified, reason := r.mcpSelectors.Ingest(pool.Name, pool.Spec.NodeSelector)
 	if !modified {
 		return []reconcile.Request{}
 	}
@@ -491,7 +492,7 @@ func (r *Reconciler) HandleDeletedMachineConfig(ctx context.Context, object clie
 		return nil
 	}
 
-	if !r.machineConfigVersions.forget(mc.Name) {
+	if !r.machineConfigVersions.Forget(mc.Name) {
 		return nil
 	}
 
@@ -513,7 +514,7 @@ func (r *Reconciler) HandleMachineConfig(ctx context.Context, object client.Obje
 		return nil
 	}
 
-	modified, reason := r.machineConfigVersions.ingest(mc)
+	modified, reason := r.machineConfigVersions.Ingest(mc)
 	if !modified {
 		return nil
 	}
