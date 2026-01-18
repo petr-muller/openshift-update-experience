@@ -27,8 +27,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // CentralNodeStateReconciler is the thin wrapper for CentralNodeStateController.
@@ -53,6 +55,47 @@ func NewCentralNodeStateReconciler(client client.Client) *CentralNodeStateReconc
 // that need to read node state.
 func (r *CentralNodeStateReconciler) GetStateProvider() nodestate.NodeStateProvider {
 	return r.impl
+}
+
+// Predicates for filtering MachineConfigPool and MachineConfig events
+var mcpDeleted = predicate.Funcs{
+	CreateFunc:  func(e event.TypedCreateEvent[client.Object]) bool { return false },
+	UpdateFunc:  func(e event.TypedUpdateEvent[client.Object]) bool { return false },
+	DeleteFunc:  func(e event.TypedDeleteEvent[client.Object]) bool { return true },
+	GenericFunc: func(e event.TypedGenericEvent[client.Object]) bool { return false },
+}
+
+var mcpSelectorEvents = predicate.Funcs{
+	CreateFunc: func(e event.TypedCreateEvent[client.Object]) bool {
+		_, ok := e.Object.(*openshiftmachineconfigurationv1.MachineConfigPool)
+		return ok
+	},
+	UpdateFunc: func(e event.TypedUpdateEvent[client.Object]) bool {
+		_, ok := e.ObjectNew.(*openshiftmachineconfigurationv1.MachineConfigPool)
+		return ok
+	},
+	DeleteFunc:  func(e event.TypedDeleteEvent[client.Object]) bool { return false },
+	GenericFunc: func(e event.TypedGenericEvent[client.Object]) bool { return false },
+}
+
+var mcDeleted = predicate.Funcs{
+	CreateFunc:  func(e event.TypedCreateEvent[client.Object]) bool { return false },
+	UpdateFunc:  func(e event.TypedUpdateEvent[client.Object]) bool { return false },
+	DeleteFunc:  func(e event.TypedDeleteEvent[client.Object]) bool { return true },
+	GenericFunc: func(e event.TypedGenericEvent[client.Object]) bool { return false },
+}
+
+var mcVersionEvents = predicate.Funcs{
+	CreateFunc: func(e event.TypedCreateEvent[client.Object]) bool {
+		_, ok := e.Object.(*openshiftmachineconfigurationv1.MachineConfig)
+		return ok
+	},
+	UpdateFunc: func(e event.TypedUpdateEvent[client.Object]) bool {
+		_, ok := e.ObjectNew.(*openshiftmachineconfigurationv1.MachineConfig)
+		return ok
+	},
+	DeleteFunc:  func(e event.TypedDeleteEvent[client.Object]) bool { return false },
+	GenericFunc: func(e event.TypedGenericEvent[client.Object]) bool { return false },
 }
 
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch

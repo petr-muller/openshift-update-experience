@@ -30,7 +30,7 @@ This project uses Kubebuilder standard layout:
 - [x] T002 Document current test coverage for provider mode in internal/controller/nodeprogressinsight_controller_test.go
 - [x] T003 Document current test coverage for legacy mode in internal/controller/nodes/impl_test.go
 - [x] T004 Verify all existing tests pass: `make test`
-- [ ] T005 Create git branch checkpoint before refactoring: `git commit -m "Pre-refactoring checkpoint"`
+- [x] T005 Create git branch checkpoint before refactoring: `git commit -m "Pre-refactoring checkpoint"`
 
 **Checkpoint**: Baseline established - refactoring can begin with confidence
 
@@ -44,17 +44,17 @@ This project uses Kubebuilder standard layout:
 
 ### Implementation for User Story 4
 
-- [ ] T006 [US4] Remove `enableNodeState` field from `controllersConfig` struct in cmd/main.go (line 66)
-- [ ] T007 [US4] Remove `--enable-node-state-controller` flag declaration in cmd/main.go (lines 103-104)
-- [ ] T008 [US4] Add automatic enablement logic before controller setup in cmd/main.go: `enableNodeState := controllers.enableNode`
-- [ ] T009 [US4] Add logging for automatic enablement decision in cmd/main.go: `setupLog.Info("CentralNodeState controller auto-enabled", "reason", "NodeProgressInsight controller is enabled")`
-- [ ] T010 [US4] Update central controller setup conditional to use new `enableNodeState` variable in cmd/main.go (line 251)
+- [x] T006 [US4] Remove `enableNodeState` field from `controllersConfig` struct in cmd/main.go (line 66)
+- [x] T007 [US4] Remove `--enable-node-state-controller` flag declaration in cmd/main.go (lines 103-104)
+- [x] T008 [US4] Add automatic enablement logic before controller setup in cmd/main.go: `enableNodeState := controllers.enableNode`
+- [x] T009 [US4] Add logging for automatic enablement decision in cmd/main.go: `setupLog.Info("CentralNodeState controller auto-enabled", "reason", "NodeProgressInsight controller is enabled")`
+- [x] T010 [US4] Update central controller setup conditional to use new `enableNodeState` variable in cmd/main.go (line 251)
 
 ### Tests for User Story 4
 
-- [ ] T011 [P] [US4] Add integration test: manager starts with `--enable-node-controller=true` → central controller auto-enabled
-- [ ] T012 [P] [US4] Add integration test: manager starts with `--enable-node-controller=false` → central controller NOT started
-- [ ] T013 [US4] Run `make test` to verify automatic enablement tests pass
+- [x] T011 [P] [US4] Add integration test: manager starts with `--enable-node-controller=true` → central controller auto-enabled
+- [x] T012 [P] [US4] Add integration test: manager starts with `--enable-node-controller=false` → central controller NOT started
+- [x] T013 [US4] Run `make test` to verify automatic enablement tests pass
 
 **Checkpoint**: Flag removed, automatic enablement working. Central controller now starts based on NodeProgressInsight enablement.
 
@@ -68,39 +68,39 @@ This project uses Kubebuilder standard layout:
 
 ### Step 1: Add Provider Requirement Validation
 
-- [ ] T014 [US5] Add nil provider check in cmd/main.go after automatic enablement, before NodeProgressInsight setup (around line 262)
-- [ ] T015 [US5] Add error message if centralNodeState is nil when controllers.enableNode is true in cmd/main.go
-- [ ] T016 [US5] Add nil provider panic in NewNodeProgressInsightReconcilerWithProvider constructor in internal/controller/nodeprogressinsight_controller.go
+- [x] T014 [US5] Add nil provider check in cmd/main.go after automatic enablement, before NodeProgressInsight setup (around line 262)
+- [x] T015 [US5] Add error message if centralNodeState is nil when controllers.enableNode is true in cmd/main.go
+- [x] T016 [US5] Add nil provider panic in NewNodeProgressInsightReconcilerWithProvider constructor in internal/controller/nodeprogressinsight_controller.go
 
 ### Step 2: Update Main.go Controller Setup
 
-- [ ] T017 [US5] Replace dual-mode constructor logic with provider-only constructor in cmd/main.go (lines 264-274)
-- [ ] T018 [US5] Remove conditional check `if centralNodeState != nil` from cmd/main.go
-- [ ] T019 [US5] Update NodeProgressInsight controller setup to ALWAYS use NewNodeProgressInsightReconcilerWithProvider in cmd/main.go
+- [x] T017 [US5] Replace dual-mode constructor logic with provider-only constructor in cmd/main.go (lines 264-274)
+- [x] T018 [US5] Remove conditional check `if centralNodeState != nil` from cmd/main.go
+- [x] T019 [US5] Update NodeProgressInsight controller setup to ALWAYS use NewNodeProgressInsightReconcilerWithProvider in cmd/main.go
 
 ### Step 3: Remove Legacy Mode Code from Controller
 
-- [ ] T020 [US5] Remove `impl *nodes.Reconciler` field from NodeProgressInsightReconciler struct in internal/controller/nodeprogressinsight_controller.go (line 45)
-- [ ] T021 [US5] Remove `NewNodeProgressInsightReconciler` constructor (legacy mode) from internal/controller/nodeprogressinsight_controller.go (lines 51-59)
-- [ ] T022 [US5] Remove legacy mode conditional `if r.stateProvider == nil` from Reconcile method in internal/controller/nodeprogressinsight_controller.go (lines 90-92)
-- [ ] T023 [US5] Remove unused import `"github.com/petr-muller/openshift-update-experience/internal/controller/nodes"` if no longer needed in internal/controller/nodeprogressinsight_controller.go
+- [x] T020 [US5] Remove `impl *nodes.Reconciler` field from NodeProgressInsightReconciler struct in internal/controller/nodeprogressinsight_controller.go (line 45)
+- [x] T021 [US5] Remove `NewNodeProgressInsightReconciler` constructor (legacy mode) from internal/controller/nodeprogressinsight_controller.go (lines 51-59)
+- [x] T022 [US5] Remove legacy mode conditional `if r.stateProvider == nil` from Reconcile method in internal/controller/nodeprogressinsight_controller.go (lines 90-92)
+- [x] T023 [US5] Remove unused import `"github.com/petr-muller/openshift-update-experience/internal/controller/nodes"` if no longer needed in internal/controller/nodeprogressinsight_controller.go
 
 ### Step 4: Remove Legacy Mode Tests
 
-- [ ] T024 [US5] Identify all test cases that explicitly test `NewNodeProgressInsightReconciler` (legacy constructor) in internal/controller/nodeprogressinsight_controller_test.go
-- [ ] T025 [US5] Remove legacy mode test cases from internal/controller/nodeprogressinsight_controller_test.go
-- [ ] T026 [US5] Identify any test cases in internal/controller/nodes/impl_test.go that test standalone reconciliation (legacy mode)
-- [ ] T027 [US5] Remove or update legacy-specific test cases from internal/controller/nodes/impl_test.go
-- [ ] T028 [US5] Verify provider mode tests cover all scenarios previously tested in legacy mode
+- [x] T024 [US5] Identify all test cases that explicitly test `NewNodeProgressInsightReconciler` (legacy constructor) in internal/controller/nodeprogressinsight_controller_test.go
+- [x] T025 [US5] Remove legacy mode test cases from internal/controller/nodeprogressinsight_controller_test.go
+- [x] T026 [US5] Identify any test cases in internal/controller/nodes/impl_test.go that test standalone reconciliation (legacy mode)
+- [x] T027 [US5] Remove or update legacy-specific test cases from internal/controller/nodes/impl_test.go
+- [x] T028 [US5] Verify provider mode tests cover all scenarios previously tested in legacy mode
 
 ### Step 5: Validation
 
-- [ ] T029 [US5] Run `make test` to ensure all provider mode tests pass after legacy removal
-- [ ] T030 [US5] Verify no coverage decrease for provider mode: `go test -cover ./internal/controller/... > post-refactoring-coverage.txt`
-- [ ] T031 [US5] Compare coverage reports: `diff baseline-coverage.txt post-refactoring-coverage.txt`
-- [ ] T032 [US5] Run `grep -r "legacy" internal/controller/` to verify zero references to legacy mode
-- [ ] T033 [US5] Run `grep -r "impl \*nodes.Reconciler" internal/` to verify field removed
-- [ ] T034 [US5] Run `grep -r "NewNodeProgressInsightReconciler(" internal/` to verify legacy constructor removed (should only find WithProvider variant)
+- [x] T029 [US5] Run `make test` to ensure all provider mode tests pass after legacy removal
+- [x] T030 [US5] Verify no coverage decrease for provider mode: `go test -cover ./internal/controller/... > post-refactoring-coverage.txt`
+- [x] T031 [US5] Compare coverage reports: `diff baseline-coverage.txt post-refactoring-coverage.txt`
+- [x] T032 [US5] Run `grep -r "legacy" internal/controller/` to verify zero references to legacy mode
+- [x] T033 [US5] Run `grep -r "impl \*nodes.Reconciler" internal/` to verify field removed
+- [x] T034 [US5] Run `grep -r "NewNodeProgressInsightReconciler(" internal/` to verify legacy constructor removed (should only find WithProvider variant)
 
 **Checkpoint**: Legacy mode completely removed. Only provider mode remains. All tests passing.
 
@@ -121,10 +121,10 @@ This project uses Kubebuilder standard layout:
 
 ### Regression Tests
 
-- [ ] T041 Verify existing provider-mode integration tests pass unchanged: `go test ./internal/controller/nodestate/... -v`
-- [ ] T042 Verify central controller metrics match pre-refactoring baseline
-- [ ] T043 Verify node state evaluation happens exactly once per node change (check metrics)
-- [ ] T044 Run full test suite: `make test` (includes manifests, generate, fmt, vet, envtest)
+- [x] T041 Verify existing provider-mode integration tests pass unchanged: `go test ./internal/controller/nodestate/... -v`
+- [x] T042 Verify central controller metrics match pre-refactoring baseline
+- [x] T043 Verify node state evaluation happens exactly once per node change (check metrics)
+- [x] T044 Run full test suite: `make test` (includes manifests, generate, fmt, vet, envtest)
 
 **Checkpoint**: Full integration validated. Refactoring complete and working.
 
@@ -134,11 +134,11 @@ This project uses Kubebuilder standard layout:
 
 **Purpose**: Update documentation to reflect the simplified architecture
 
-- [ ] T045 [P] Update CLAUDE.md to remove `--enable-node-state-controller` from Controller Flags section
-- [ ] T046 [P] Update CLAUDE.md Recent Changes section to document legacy mode removal
-- [ ] T047 [P] Add migration note to CLAUDE.md or create MIGRATION.md documenting the breaking change
-- [ ] T048 [P] Update any deployment examples or README files that reference the removed flag
-- [ ] T049 [P] Search codebase for any remaining documentation references: `grep -r "enable-node-state-controller" . --exclude-dir=.git`
+- [x] T045 [P] Update CLAUDE.md to remove `--enable-node-state-controller` from Controller Flags section
+- [x] T046 [P] Update CLAUDE.md Recent Changes section to document legacy mode removal
+- [x] T047 [P] Add migration note to CLAUDE.md or create MIGRATION.md documenting the breaking change
+- [x] T048 [P] Update any deployment examples or README files that reference the removed flag
+- [x] T049 [P] Search codebase for any remaining documentation references: `grep -r "enable-node-state-controller" . --exclude-dir=.git`
 
 **Checkpoint**: Documentation updated. Users have clear migration guidance.
 
