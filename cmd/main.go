@@ -63,7 +63,6 @@ type controllersConfig struct {
 	enableClusterVersion  bool
 	enableClusterOperator bool
 	enableNode            bool
-	enableNodeState       bool
 }
 
 // nolint:gocyclo
@@ -100,8 +99,6 @@ func main() {
 		"Enable the ClusterOperatorProgressInsight controller")
 	flag.BoolVar(&controllers.enableNode, "enable-node-controller", true,
 		"Enable the NodeProgressInsight controller")
-	flag.BoolVar(&controllers.enableNodeState, "enable-node-state-controller", true,
-		"Enable the CentralNodeState controller (provides centralized node state evaluation)")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -245,10 +242,18 @@ func main() {
 		setupLog.Info("ClusterOperatorProgressInsight controller disabled")
 	}
 
+	// Automatic dependency enablement: CentralNodeState controller is automatically
+	// enabled when NodeProgressInsight controller is enabled
+	enableNodeState := controllers.enableNode
+	if enableNodeState {
+		setupLog.Info("CentralNodeState controller auto-enabled",
+			"reason", "NodeProgressInsight controller is enabled")
+	}
+
 	// CentralNodeState controller must be set up first if enabled, as it provides
 	// the NodeStateProvider for downstream controllers
 	var centralNodeState *controller.CentralNodeStateReconciler
-	if controllers.enableNodeState {
+	if enableNodeState {
 		setupLog.Info("Setting up CentralNodeState controller")
 		centralNodeState = controller.NewCentralNodeStateReconciler(mgr.GetClient())
 		if err = centralNodeState.SetupWithManager(mgr); err != nil {
@@ -260,19 +265,21 @@ func main() {
 	}
 
 	if controllers.enableNode {
-		setupLog.Info("Setting up NodeProgressInsight controller")
-		var nodeInformer *controller.NodeProgressInsightReconciler
-		if centralNodeState != nil {
-			// Use the central state provider when available
-			nodeInformer = controller.NewNodeProgressInsightReconcilerWithProvider(
-				mgr.GetClient(),
-				mgr.GetScheme(),
-				centralNodeState.GetStateProvider(),
-			)
-		} else {
-			// Fall back to standalone mode (legacy behavior)
-			nodeInformer = controller.NewNodeProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())
+		// Fail fast if central controller is not available (should not happen with automatic enablement)
+		if centralNodeState == nil {
+			setupLog.Error(nil, "NodeProgressInsight controller requires CentralNodeState controller",
+				"required-by", "NodeProgressInsight",
+				"missing", "CentralNodeState",
+				"fix", "This is a bug in automatic enablement logic")
+			os.Exit(1)
 		}
+
+		setupLog.Info("Setting up NodeProgressInsight controller")
+		nodeInformer := controller.NewNodeProgressInsightReconcilerWithProvider(
+			mgr.GetClient(),
+			mgr.GetScheme(),
+			centralNodeState.GetStateProvider(),
+		)
 		if err = nodeInformer.SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "NodeProgressInsight")
 			os.Exit(1)

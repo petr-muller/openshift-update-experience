@@ -155,9 +155,8 @@ The controller manager supports:
 - `--enable-cluster-version-controller` (default: true) - ClusterVersion progress tracking
 - `--enable-cluster-operator-controller` (default: true) - ClusterOperator progress tracking
 - `--enable-node-controller` (default: true) - NodeProgressInsight controller
-- `--enable-node-state-controller` (default: true) - **NEW** Central node state controller
-  - When enabled: NodeProgressInsight uses provider mode (reads from central controller)
-  - When disabled: NodeProgressInsight uses legacy mode (evaluates state independently)
+  - When enabled: Central node state controller is automatically enabled
+  - NodeProgressInsight reads pre-computed state from the central controller
 - Standard controller-runtime flags (metrics, leader election, etc.)
 
 ### Metrics (Central Node State Controller)
@@ -176,10 +175,17 @@ The central controller exposes Prometheus metrics:
 - In-memory only (sync.Map for central controller state cache) (001-central-node-state-controller)
 
 ## Recent Changes
+- **Legacy Mode Removal & Automatic Dependency Enablement** (2025-01): Simplified central node state controller architecture
+  - **BREAKING CHANGE**: Removed `--enable-node-state-controller` flag (previously defaulted to true)
+  - Central controller now automatically enables when `--enable-node-controller=true`
+  - Removed dual-mode support from NodeProgressInsight controller (provider mode only)
+  - NodeProgressInsight always reads from central controller - no standalone mode
+  - **Migration**: Remove `--enable-node-state-controller` from deployment configurations if present
+  - All tests pass, provider mode maintains 83.7% coverage
+
 - **Central Node State Controller** (2025-01): Implemented centralized node state evaluation controller
   - New package: `internal/controller/nodestate/` with 13 files, 83.4% test coverage
   - Single evaluation per node change, consistent state snapshots for all downstream controllers
   - Notification channels for reactive updates, graceful degradation (0 to N consumers)
   - Full observability: Prometheus metrics + structured logging with correlation IDs
-  - Provider/legacy mode support for backwards compatibility
   - Implements manager.Runnable for proper lifecycle management
