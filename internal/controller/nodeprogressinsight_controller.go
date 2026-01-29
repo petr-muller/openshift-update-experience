@@ -19,13 +19,14 @@ package controller
 import (
 	"context"
 
-	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
-	"github.com/petr-muller/openshift-update-experience/internal/controller/nodestate"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
+	"github.com/petr-muller/openshift-update-experience/internal/controller/nodestate"
 )
 
 // NodeProgressInsightReconciler reconciles a NodeProgressInsight object
@@ -34,12 +35,12 @@ type NodeProgressInsightReconciler struct {
 	Scheme *runtime.Scheme
 
 	// stateProvider is the central node state provider (required)
-	stateProvider nodestate.NodeStateProvider
+	stateProvider nodestate.Provider
 }
 
-// NewNodeProgressInsightReconcilerWithProvider creates a NodeProgressInsightReconciler that uses
+// NewNodeProgressInsightReconciler creates a NodeProgressInsightReconciler that uses
 // the central state provider for node state. This is the only supported mode.
-func NewNodeProgressInsightReconcilerWithProvider(client client.Client, scheme *runtime.Scheme, provider nodestate.NodeStateProvider) *NodeProgressInsightReconciler {
+func NewNodeProgressInsightReconciler(client client.Client, scheme *runtime.Scheme, provider nodestate.Provider) *NodeProgressInsightReconciler {
 	if provider == nil {
 		// This should never happen due to main.go check, but defensive programming
 		panic("NodeProgressInsightReconciler requires non-nil NodeStateProvider")

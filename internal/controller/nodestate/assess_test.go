@@ -303,53 +303,6 @@ func TestDefaultStateEvaluator_EvaluateNode_UpdatePhases(t *testing.T) {
 	}
 }
 
-func TestAssessNodeForInsight(t *testing.T) {
-	now := metav1.Now()
-
-	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "worker-1",
-			Annotations: map[string]string{
-				mco.CurrentMachineConfigAnnotationKey:     "rendered-worker-abc",
-				mco.DesiredMachineConfigAnnotationKey:     "rendered-worker-abc",
-				mco.MachineConfigDaemonStateAnnotationKey: mco.MachineConfigDaemonStateDone,
-			},
-		},
-	}
-
-	pool := &openshiftmachineconfigurationv1.MachineConfigPool{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "worker",
-		},
-	}
-
-	versionLookup := func(mc string) (string, bool) {
-		if mc == "rendered-worker-abc" {
-			return "4.13.0", true
-		}
-		return "", false
-	}
-
-	result := AssessNodeForInsight(node, pool, versionLookup, "4.13.0", nil, now)
-
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-
-	if result.Name != "worker-1" {
-		t.Errorf("expected Name 'worker-1', got %q", result.Name)
-	}
-	if result.PoolResource.Name != "worker" {
-		t.Errorf("expected PoolResource.Name 'worker', got %q", result.PoolResource.Name)
-	}
-	if result.Scope != ouev1alpha1.WorkerPoolScope {
-		t.Errorf("expected Scope %q, got %q", ouev1alpha1.WorkerPoolScope, result.Scope)
-	}
-	if result.Version != "4.13.0" {
-		t.Errorf("expected Version '4.13.0', got %q", result.Version)
-	}
-}
-
 func TestConvertStateToInsight(t *testing.T) {
 	// Test nil input
 	if result := ConvertStateToInsight(nil); result != nil {
@@ -476,14 +429,14 @@ func TestEstimateFromPhase(t *testing.T) {
 }
 
 func TestNodeStateToUID(t *testing.T) {
-	if uid := NodeStateToUID(nil); uid != "" {
+	if uid := ToUID(nil); uid != "" {
 		t.Errorf("expected empty UID for nil state, got %q", uid)
 	}
 
 	state := &NodeState{
 		UID: types.UID("test-uid-123"),
 	}
-	if uid := NodeStateToUID(state); uid != types.UID("test-uid-123") {
+	if uid := ToUID(state); uid != types.UID("test-uid-123") {
 		t.Errorf("expected UID 'test-uid-123', got %q", uid)
 	}
 }

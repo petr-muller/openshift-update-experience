@@ -31,14 +31,14 @@ make build  # Should succeed
    ```
    internal/controller/nodestate/
    ├── doc.go              # Package documentation
-   ├── state.go            # NodeState and NodeStateStore
+   ├── state.go            # NodeState and Store
    ├── state_test.go
    ├── caches.go           # Moved MCP selector and MC version caches
    ├── caches_test.go
    └── metrics.go          # Prometheus metrics registration
    ```
 
-2. **Implement NodeState and NodeStateStore**
+2. **Implement NodeState and Store**
    - Define structs from data-model.md
    - Implement Get/Set/Delete/Range methods
    - Add hash computation for change detection
@@ -117,7 +117,7 @@ type CentralNodeStateController struct {
     Scheme *runtime.Scheme
 
     // State management
-    store          *NodeStateStore
+    store          *Store
     mcpSelectors   *MachineConfigPoolSelectorCache
     mcVersions     *MachineConfigVersionCache
 
@@ -135,7 +135,7 @@ func NewCentralNodeStateController(c client.Client, s *runtime.Scheme) *CentralN
     return &CentralNodeStateController{
         Client:          c,
         Scheme:          s,
-        store:           &NodeStateStore{},
+        store:           &Store{},
         mcpSelectors:    &MachineConfigPoolSelectorCache{},
         mcVersions:      &MachineConfigVersionCache{},
         nodeInsightChan: make(chan event.GenericEvent, 1024),
@@ -227,7 +227,7 @@ make test
 go test ./internal/controller/nodestate/... -v
 
 # Run specific test
-go test -run TestNodeStateStore ./internal/controller/nodestate -v
+go test -run TestStore ./internal/controller/nodestate -v
 
 # Run with race detector
 go test -race ./internal/controller/nodestate/...

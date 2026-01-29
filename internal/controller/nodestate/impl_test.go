@@ -149,44 +149,8 @@ func TestCentralNodeStateController_Reconcile_StateChange(t *testing.T) {
 		},
 	}
 
-	mcp := &openshiftmachineconfigurationv1.MachineConfigPool{
-		ObjectMeta: metav1.ObjectMeta{Name: "worker"},
-		Spec: openshiftmachineconfigurationv1.MachineConfigPoolSpec{
-			NodeSelector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"node-role.kubernetes.io/worker": ""},
-			},
-		},
-	}
+	fakeClient, controller := prepareCentralNodeStateController(node)
 
-	mcOld := &openshiftmachineconfigurationv1.MachineConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        "rendered-worker-abc",
-			Annotations: map[string]string{mco.ReleaseImageVersionAnnotationKey: "4.12.0"},
-		},
-	}
-
-	mcNew := &openshiftmachineconfigurationv1.MachineConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        "rendered-worker-xyz",
-			Annotations: map[string]string{mco.ReleaseImageVersionAnnotationKey: "4.13.0"},
-		},
-	}
-
-	cv := &openshiftconfigv1.ClusterVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "version"},
-		Status: openshiftconfigv1.ClusterVersionStatus{
-			History: []openshiftconfigv1.UpdateHistory{
-				{Version: "4.13.0", State: openshiftconfigv1.PartialUpdate},
-			},
-		},
-	}
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(node, mcp, mcOld, mcNew, cv).
-		Build()
-
-	controller := NewCentralNodeStateController(fakeClient)
 	ctx := context.Background()
 	_ = controller.InitializeCaches(ctx)
 
@@ -310,60 +274,7 @@ func TestCentralNodeStateController_ConsistentSnapshots(t *testing.T) {
 	_ = openshiftconfigv1.Install(scheme)
 	_ = openshiftmachineconfigurationv1.Install(scheme)
 
-	// Create multiple nodes
-	nodes := []client.Object{
-		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "worker-1",
-				Labels: map[string]string{"node-role.kubernetes.io/worker": ""},
-				Annotations: map[string]string{
-					mco.CurrentMachineConfigAnnotationKey:     "rendered-worker-abc",
-					mco.DesiredMachineConfigAnnotationKey:     "rendered-worker-abc",
-					mco.MachineConfigDaemonStateAnnotationKey: mco.MachineConfigDaemonStateDone,
-				},
-			},
-		},
-		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "worker-2",
-				Labels: map[string]string{"node-role.kubernetes.io/worker": ""},
-				Annotations: map[string]string{
-					mco.CurrentMachineConfigAnnotationKey:     "rendered-worker-abc",
-					mco.DesiredMachineConfigAnnotationKey:     "rendered-worker-xyz",
-					mco.MachineConfigDaemonStateAnnotationKey: mco.MachineConfigDaemonStateWorking,
-				},
-			},
-		},
-		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "master-0",
-				Labels: map[string]string{"node-role.kubernetes.io/master": ""},
-				Annotations: map[string]string{
-					mco.CurrentMachineConfigAnnotationKey:     "rendered-master-abc",
-					mco.DesiredMachineConfigAnnotationKey:     "rendered-master-abc",
-					mco.MachineConfigDaemonStateAnnotationKey: mco.MachineConfigDaemonStateDone,
-				},
-			},
-		},
-	}
-
-	mcp := &openshiftmachineconfigurationv1.MachineConfigPool{
-		ObjectMeta: metav1.ObjectMeta{Name: "worker"},
-		Spec: openshiftmachineconfigurationv1.MachineConfigPoolSpec{
-			NodeSelector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"node-role.kubernetes.io/worker": ""},
-			},
-		},
-	}
-
-	masterMCP := &openshiftmachineconfigurationv1.MachineConfigPool{
-		ObjectMeta: metav1.ObjectMeta{Name: "master"},
-		Spec: openshiftmachineconfigurationv1.MachineConfigPoolSpec{
-			NodeSelector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"node-role.kubernetes.io/master": ""},
-			},
-		},
-	}
+	nodes, mcp, masterMCP := preparePoolsWIthMultipleNodes()
 
 	mc1 := &openshiftmachineconfigurationv1.MachineConfig{
 		ObjectMeta: metav1.ObjectMeta{
@@ -691,7 +602,7 @@ func TestCentralNodeStateController_GetTrackedNodeCount(t *testing.T) {
 
 func TestNodeStateProvider_Interface(t *testing.T) {
 	// Compile-time check that CentralNodeStateController implements NodeStateProvider
-	var _ NodeStateProvider = (*CentralNodeStateController)(nil)
+	var _ Provider = (*CentralNodeStateController)(nil)
 }
 
 func TestCentralNodeStateController_HandleClusterVersion(t *testing.T) {
@@ -882,7 +793,7 @@ func TestCentralNodeStateController_NotifyNodeInsight_ContextCancelled(t *testin
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// Notification should not block even with cancelled context
+	// Notification should not block even with canceled context
 	// It may return an error or simply not send, but shouldn't block
 	done := make(chan struct{})
 	go func() {
@@ -983,11 +894,6 @@ func TestCentralNodeStateController_NotifyAllDownstream(t *testing.T) {
 // T031: Integration test - downstream controller receives notification on state change
 
 func TestCentralNodeStateController_StateChange_TriggersNotification(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-	_ = openshiftconfigv1.Install(scheme)
-	_ = openshiftmachineconfigurationv1.Install(scheme)
-
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "worker-1",
@@ -1000,44 +906,8 @@ func TestCentralNodeStateController_StateChange_TriggersNotification(t *testing.
 		},
 	}
 
-	mcp := &openshiftmachineconfigurationv1.MachineConfigPool{
-		ObjectMeta: metav1.ObjectMeta{Name: "worker"},
-		Spec: openshiftmachineconfigurationv1.MachineConfigPoolSpec{
-			NodeSelector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"node-role.kubernetes.io/worker": ""},
-			},
-		},
-	}
+	fakeClient, controller := prepareCentralNodeStateController(node)
 
-	mcOld := &openshiftmachineconfigurationv1.MachineConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        "rendered-worker-abc",
-			Annotations: map[string]string{mco.ReleaseImageVersionAnnotationKey: "4.12.0"},
-		},
-	}
-
-	mcNew := &openshiftmachineconfigurationv1.MachineConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        "rendered-worker-xyz",
-			Annotations: map[string]string{mco.ReleaseImageVersionAnnotationKey: "4.13.0"},
-		},
-	}
-
-	cv := &openshiftconfigv1.ClusterVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "version"},
-		Status: openshiftconfigv1.ClusterVersionStatus{
-			History: []openshiftconfigv1.UpdateHistory{
-				{Version: "4.13.0", State: openshiftconfigv1.PartialUpdate},
-			},
-		},
-	}
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(node, mcp, mcOld, mcNew, cv).
-		Build()
-
-	controller := NewCentralNodeStateController(fakeClient)
 	ctx := context.Background()
 	_ = controller.InitializeCaches(ctx)
 
@@ -1092,23 +962,11 @@ func TestCentralNodeStateController_StateChange_TriggersNotification(t *testing.
 	}
 }
 
-func TestCentralNodeStateController_NoNotification_WhenStateUnchanged(t *testing.T) {
+func prepareCentralNodeStateController(node *corev1.Node) (client.WithWatch, *CentralNodeStateController) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = openshiftconfigv1.Install(scheme)
 	_ = openshiftmachineconfigurationv1.Install(scheme)
-
-	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   "worker-1",
-			Labels: map[string]string{"node-role.kubernetes.io/worker": ""},
-			Annotations: map[string]string{
-				mco.CurrentMachineConfigAnnotationKey:     "rendered-worker-abc",
-				mco.DesiredMachineConfigAnnotationKey:     "rendered-worker-abc",
-				mco.MachineConfigDaemonStateAnnotationKey: mco.MachineConfigDaemonStateDone,
-			},
-		},
-	}
 
 	mcp := &openshiftmachineconfigurationv1.MachineConfigPool{
 		ObjectMeta: metav1.ObjectMeta{Name: "worker"},
@@ -1119,9 +977,16 @@ func TestCentralNodeStateController_NoNotification_WhenStateUnchanged(t *testing
 		},
 	}
 
-	mc := &openshiftmachineconfigurationv1.MachineConfig{
+	mcOld := &openshiftmachineconfigurationv1.MachineConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "rendered-worker-abc",
+			Annotations: map[string]string{mco.ReleaseImageVersionAnnotationKey: "4.12.0"},
+		},
+	}
+
+	mcNew := &openshiftmachineconfigurationv1.MachineConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "rendered-worker-xyz",
 			Annotations: map[string]string{mco.ReleaseImageVersionAnnotationKey: "4.13.0"},
 		},
 	}
@@ -1130,17 +995,22 @@ func TestCentralNodeStateController_NoNotification_WhenStateUnchanged(t *testing
 		ObjectMeta: metav1.ObjectMeta{Name: "version"},
 		Status: openshiftconfigv1.ClusterVersionStatus{
 			History: []openshiftconfigv1.UpdateHistory{
-				{Version: "4.13.0", State: openshiftconfigv1.CompletedUpdate},
+				{Version: "4.13.0", State: openshiftconfigv1.PartialUpdate},
 			},
 		},
 	}
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(node, mcp, mc, cv).
+		WithObjects(node, mcp, mcOld, mcNew, cv).
 		Build()
 
 	controller := NewCentralNodeStateController(fakeClient)
+	return fakeClient, controller
+}
+
+func TestCentralNodeStateController_NoNotification_WhenStateUnchanged(t *testing.T) {
+	controller := prepareController()
 	ctx := context.Background()
 	_ = controller.InitializeCaches(ctx)
 
@@ -1176,6 +1046,39 @@ func TestCentralNodeStateController_NoNotification_WhenStateUnchanged(t *testing
 
 // T044: Unit test - central controller processes state with no downstream channels consumed
 func TestCentralNodeStateController_ProcessesState_WithUnconsumedChannels(t *testing.T) {
+	controller := prepareController()
+	ctx := context.Background()
+	_ = controller.InitializeCaches(ctx)
+
+	// DO NOT consume from channels - simulate no downstream controllers registered
+	// The controller should still process state without blocking or errors
+
+	// Reconcile multiple times - should not block even with unconsumed channel events
+	for i := 0; i < 10; i++ {
+		req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "worker-1"}}
+		_, err := controller.Reconcile(ctx, req)
+		if err != nil {
+			t.Fatalf("Reconcile %d failed: %v", i, err)
+		}
+	}
+
+	// Verify state was still tracked correctly
+	state, ok := controller.GetNodeState("worker-1")
+	if !ok {
+		t.Fatal("Expected node state to be tracked")
+	}
+	if state.Phase != UpdatePhaseCompleted {
+		t.Errorf("Expected phase Completed, got %q", state.Phase)
+	}
+
+	// Channel buffer should have events (first reconcile triggers notification)
+	// but subsequent reconciles with same state should not
+	if controller.GetTotalEvaluations() != 1 {
+		t.Errorf("Expected 1 evaluation (state unchanged after first), got %d", controller.GetTotalEvaluations())
+	}
+}
+
+func prepareController() *CentralNodeStateController {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = openshiftconfigv1.Install(scheme)
@@ -1224,35 +1127,7 @@ func TestCentralNodeStateController_ProcessesState_WithUnconsumedChannels(t *tes
 		Build()
 
 	controller := NewCentralNodeStateController(fakeClient)
-	ctx := context.Background()
-	_ = controller.InitializeCaches(ctx)
-
-	// DO NOT consume from channels - simulate no downstream controllers registered
-	// The controller should still process state without blocking or errors
-
-	// Reconcile multiple times - should not block even with unconsumed channel events
-	for i := 0; i < 10; i++ {
-		req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "worker-1"}}
-		_, err := controller.Reconcile(ctx, req)
-		if err != nil {
-			t.Fatalf("Reconcile %d failed: %v", i, err)
-		}
-	}
-
-	// Verify state was still tracked correctly
-	state, ok := controller.GetNodeState("worker-1")
-	if !ok {
-		t.Fatal("Expected node state to be tracked")
-	}
-	if state.Phase != UpdatePhaseCompleted {
-		t.Errorf("Expected phase Completed, got %q", state.Phase)
-	}
-
-	// Channel buffer should have events (first reconcile triggers notification)
-	// but subsequent reconciles with same state should not
-	if controller.GetTotalEvaluations() != 1 {
-		t.Errorf("Expected 1 evaluation (state unchanged after first), got %d", controller.GetTotalEvaluations())
-	}
+	return controller
 }
 
 // T045: Unit test - late-registering controller receives current state snapshot
@@ -1262,60 +1137,7 @@ func TestCentralNodeStateController_LateRegistration_ReceivesCurrentState(t *tes
 	_ = openshiftconfigv1.Install(scheme)
 	_ = openshiftmachineconfigurationv1.Install(scheme)
 
-	// Create multiple nodes
-	nodes := []client.Object{
-		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "worker-1",
-				Labels: map[string]string{"node-role.kubernetes.io/worker": ""},
-				Annotations: map[string]string{
-					mco.CurrentMachineConfigAnnotationKey:     "rendered-worker-abc",
-					mco.DesiredMachineConfigAnnotationKey:     "rendered-worker-abc",
-					mco.MachineConfigDaemonStateAnnotationKey: mco.MachineConfigDaemonStateDone,
-				},
-			},
-		},
-		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "worker-2",
-				Labels: map[string]string{"node-role.kubernetes.io/worker": ""},
-				Annotations: map[string]string{
-					mco.CurrentMachineConfigAnnotationKey:     "rendered-worker-abc",
-					mco.DesiredMachineConfigAnnotationKey:     "rendered-worker-xyz",
-					mco.MachineConfigDaemonStateAnnotationKey: mco.MachineConfigDaemonStateWorking,
-				},
-			},
-		},
-		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "master-0",
-				Labels: map[string]string{"node-role.kubernetes.io/master": ""},
-				Annotations: map[string]string{
-					mco.CurrentMachineConfigAnnotationKey:     "rendered-master-abc",
-					mco.DesiredMachineConfigAnnotationKey:     "rendered-master-abc",
-					mco.MachineConfigDaemonStateAnnotationKey: mco.MachineConfigDaemonStateDone,
-				},
-			},
-		},
-	}
-
-	mcp := &openshiftmachineconfigurationv1.MachineConfigPool{
-		ObjectMeta: metav1.ObjectMeta{Name: "worker"},
-		Spec: openshiftmachineconfigurationv1.MachineConfigPoolSpec{
-			NodeSelector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"node-role.kubernetes.io/worker": ""},
-			},
-		},
-	}
-
-	masterMCP := &openshiftmachineconfigurationv1.MachineConfigPool{
-		ObjectMeta: metav1.ObjectMeta{Name: "master"},
-		Spec: openshiftmachineconfigurationv1.MachineConfigPoolSpec{
-			NodeSelector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"node-role.kubernetes.io/master": ""},
-			},
-		},
-	}
+	nodes, mcp, masterMCP := preparePoolsWIthMultipleNodes()
 
 	mcs := []client.Object{
 		&openshiftmachineconfigurationv1.MachineConfig{
@@ -1400,21 +1222,40 @@ func TestCentralNodeStateController_LateRegistration_ReceivesCurrentState(t *tes
 	}
 }
 
-// T046: Integration test - full lifecycle with delayed downstream registration
-func TestCentralNodeStateController_DelayedRegistration_FullLifecycle(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-	_ = openshiftconfigv1.Install(scheme)
-	_ = openshiftmachineconfigurationv1.Install(scheme)
-
-	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   "worker-1",
-			Labels: map[string]string{"node-role.kubernetes.io/worker": ""},
-			Annotations: map[string]string{
-				mco.CurrentMachineConfigAnnotationKey:     "rendered-worker-abc",
-				mco.DesiredMachineConfigAnnotationKey:     "rendered-worker-xyz",
-				mco.MachineConfigDaemonStateAnnotationKey: mco.MachineConfigDaemonStateWorking,
+func preparePoolsWIthMultipleNodes() ([]client.Object, *openshiftmachineconfigurationv1.MachineConfigPool, *openshiftmachineconfigurationv1.MachineConfigPool) {
+	// Create multiple nodes
+	nodes := []client.Object{
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "worker-1",
+				Labels: map[string]string{"node-role.kubernetes.io/worker": ""},
+				Annotations: map[string]string{
+					mco.CurrentMachineConfigAnnotationKey:     "rendered-worker-abc",
+					mco.DesiredMachineConfigAnnotationKey:     "rendered-worker-abc",
+					mco.MachineConfigDaemonStateAnnotationKey: mco.MachineConfigDaemonStateDone,
+				},
+			},
+		},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "worker-2",
+				Labels: map[string]string{"node-role.kubernetes.io/worker": ""},
+				Annotations: map[string]string{
+					mco.CurrentMachineConfigAnnotationKey:     "rendered-worker-abc",
+					mco.DesiredMachineConfigAnnotationKey:     "rendered-worker-xyz",
+					mco.MachineConfigDaemonStateAnnotationKey: mco.MachineConfigDaemonStateWorking,
+				},
+			},
+		},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "master-0",
+				Labels: map[string]string{"node-role.kubernetes.io/master": ""},
+				Annotations: map[string]string{
+					mco.CurrentMachineConfigAnnotationKey:     "rendered-master-abc",
+					mco.DesiredMachineConfigAnnotationKey:     "rendered-master-abc",
+					mco.MachineConfigDaemonStateAnnotationKey: mco.MachineConfigDaemonStateDone,
+				},
 			},
 		},
 	}
@@ -1428,35 +1269,32 @@ func TestCentralNodeStateController_DelayedRegistration_FullLifecycle(t *testing
 		},
 	}
 
-	mcOld := &openshiftmachineconfigurationv1.MachineConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        "rendered-worker-abc",
-			Annotations: map[string]string{mco.ReleaseImageVersionAnnotationKey: "4.12.0"},
+	masterMCP := &openshiftmachineconfigurationv1.MachineConfigPool{
+		ObjectMeta: metav1.ObjectMeta{Name: "master"},
+		Spec: openshiftmachineconfigurationv1.MachineConfigPoolSpec{
+			NodeSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"node-role.kubernetes.io/master": ""},
+			},
 		},
 	}
+	return nodes, mcp, masterMCP
+}
 
-	mcNew := &openshiftmachineconfigurationv1.MachineConfig{
+// T046: Integration test - full lifecycle with delayed downstream registration
+func TestCentralNodeStateController_DelayedRegistration_FullLifecycle(t *testing.T) {
+	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        "rendered-worker-xyz",
-			Annotations: map[string]string{mco.ReleaseImageVersionAnnotationKey: "4.13.0"},
-		},
-	}
-
-	cv := &openshiftconfigv1.ClusterVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "version"},
-		Status: openshiftconfigv1.ClusterVersionStatus{
-			History: []openshiftconfigv1.UpdateHistory{
-				{Version: "4.13.0", State: openshiftconfigv1.PartialUpdate},
+			Name:   "worker-1",
+			Labels: map[string]string{"node-role.kubernetes.io/worker": ""},
+			Annotations: map[string]string{
+				mco.CurrentMachineConfigAnnotationKey:     "rendered-worker-abc",
+				mco.DesiredMachineConfigAnnotationKey:     "rendered-worker-xyz",
+				mco.MachineConfigDaemonStateAnnotationKey: mco.MachineConfigDaemonStateWorking,
 			},
 		},
 	}
 
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(node, mcp, mcOld, mcNew, cv).
-		Build()
-
-	controller := NewCentralNodeStateController(fakeClient)
+	fakeClient, controller := prepareCentralNodeStateController(node)
 	ctx := context.Background()
 	_ = controller.InitializeCaches(ctx)
 
@@ -1694,7 +1532,7 @@ func TestCentralNodeStateController_StructuredLogging_NodeNotFound(t *testing.T)
 	}
 }
 
-// T061: Unit test: Start() blocks until context cancelled
+// T061: Unit test: Start() blocks until context canceled
 
 func TestCentralNodeStateController_Start_BlocksUntilContextCancelled(t *testing.T) {
 	scheme := runtime.NewScheme()

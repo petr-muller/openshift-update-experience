@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"sync"
 
-	mcfgv1 "github.com/openshift/api/machineconfiguration/v1"
-	"github.com/petr-muller/openshift-update-experience/internal/mco"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	mcfgv1 "github.com/openshift/api/machineconfiguration/v1"
+
+	"github.com/petr-muller/openshift-update-experience/internal/mco"
 )
 
 // MachineConfigPoolSelectorCache caches label selectors from MachineConfigPools

@@ -6,30 +6,28 @@ import (
 	"sync/atomic"
 	"time"
 
-	openshiftconfigv1 "github.com/openshift/api/config/v1"
-	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	openshiftconfigv1 "github.com/openshift/api/config/v1"
+	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
 )
 
 // defaultChannelBufferSize is the buffer size for notification channels.
 // 1024 provides sufficient buffering for clusters with many nodes.
 const defaultChannelBufferSize = 1024
 
-// NodeStateProvider defines the interface for accessing node state.
+// Provider defines the interface for accessing node state.
 // Downstream controllers (NodeProgressInsight, MCPProgressInsight) use this interface
 // to read the pre-computed node state instead of evaluating it themselves.
-type NodeStateProvider interface {
+type Provider interface {
 	// GetNodeState returns the current evaluated state for a single node.
 	// Returns (state, true) if found, (nil, false) if the node is not tracked.
 	GetNodeState(nodeName string) (*NodeState, bool)
@@ -59,7 +57,7 @@ type CentralNodeStateController struct {
 	client.Client
 
 	// stateStore holds the evaluated node states
-	stateStore NodeStateStore
+	stateStore Store
 
 	// mcpSelectors caches MCP label selectors for node->pool mapping
 	mcpSelectors MachineConfigPoolSelectorCache
@@ -104,14 +102,14 @@ func NewCentralNodeStateController(client client.Client) *CentralNodeStateContro
 
 // NewCentralNodeStateControllerWithOptions creates a controller with custom options for testing.
 func NewCentralNodeStateControllerWithOptions(client client.Client, evaluator StateEvaluator, nowFunc func() time.Time) *CentralNodeStateController {
-	ctrl := NewCentralNodeStateController(client)
+	c := NewCentralNodeStateController(client)
 	if evaluator != nil {
-		ctrl.evaluator = evaluator
+		c.evaluator = evaluator
 	}
 	if nowFunc != nil {
-		ctrl.now = nowFunc
+		c.now = nowFunc
 	}
-	return ctrl
+	return c
 }
 
 // Reconcile evaluates node state and stores it in the central store.
@@ -336,10 +334,10 @@ func (c *CentralNodeStateController) NotifyNodeInsightControllers(ctx context.Co
 // The notification is non-blocking.
 func (c *CentralNodeStateController) NotifyMCPInsightControllers(ctx context.Context, poolName string) error {
 	// Create a synthetic object to carry the pool name
-	// We use a minimal metav1.Object that can carry the name
-	syntheticObj := &mcpNotificationObject{name: poolName}
+	mcp := &openshiftmachineconfigurationv1.MachineConfigPool{}
+	mcp.Name = poolName
 	select {
-	case c.mcpInsightEvents <- event.GenericEvent{Object: syntheticObj}:
+	case c.mcpInsightEvents <- event.GenericEvent{Object: mcp}:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -375,8 +373,10 @@ func (c *CentralNodeStateController) NotifyAllDownstream(ctx context.Context) er
 
 	// Notify for all unique pools
 	for poolName := range pools {
+		mcp := &openshiftmachineconfigurationv1.MachineConfigPool{}
+		mcp.Name = poolName
 		select {
-		case c.mcpInsightEvents <- event.GenericEvent{Object: &mcpNotificationObject{name: poolName}}:
+		case c.mcpInsightEvents <- event.GenericEvent{Object: mcp}:
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
@@ -385,47 +385,6 @@ func (c *CentralNodeStateController) NotifyAllDownstream(ctx context.Context) er
 	}
 
 	return nil
-}
-
-// mcpNotificationObject is a minimal implementation of client.Object
-// used to carry the MCP name in notifications.
-type mcpNotificationObject struct {
-	name string
-}
-
-func (m *mcpNotificationObject) GetName() string                               { return m.name }
-func (m *mcpNotificationObject) GetNamespace() string                          { return "" }
-func (m *mcpNotificationObject) SetName(name string)                           { m.name = name }
-func (m *mcpNotificationObject) SetNamespace(namespace string)                 {}
-func (m *mcpNotificationObject) GetGenerateName() string                       { return "" }
-func (m *mcpNotificationObject) SetGenerateName(name string)                   {}
-func (m *mcpNotificationObject) GetResourceVersion() string                    { return "" }
-func (m *mcpNotificationObject) SetResourceVersion(version string)             {}
-func (m *mcpNotificationObject) GetGeneration() int64                          { return 0 }
-func (m *mcpNotificationObject) SetGeneration(generation int64)                {}
-func (m *mcpNotificationObject) GetSelfLink() string                           { return "" }
-func (m *mcpNotificationObject) SetSelfLink(selfLink string)                   {}
-func (m *mcpNotificationObject) GetUID() types.UID                             { return "" }
-func (m *mcpNotificationObject) SetUID(uid types.UID)                          {}
-func (m *mcpNotificationObject) GetCreationTimestamp() metav1.Time             { return metav1.Time{} }
-func (m *mcpNotificationObject) SetCreationTimestamp(timestamp metav1.Time)    {}
-func (m *mcpNotificationObject) GetDeletionTimestamp() *metav1.Time            { return nil }
-func (m *mcpNotificationObject) SetDeletionTimestamp(timestamp *metav1.Time)   {}
-func (m *mcpNotificationObject) GetDeletionGracePeriodSeconds() *int64         { return nil }
-func (m *mcpNotificationObject) SetDeletionGracePeriodSeconds(i *int64)        {}
-func (m *mcpNotificationObject) GetLabels() map[string]string                  { return nil }
-func (m *mcpNotificationObject) SetLabels(labels map[string]string)            {}
-func (m *mcpNotificationObject) GetAnnotations() map[string]string             { return nil }
-func (m *mcpNotificationObject) SetAnnotations(annotations map[string]string)  {}
-func (m *mcpNotificationObject) GetFinalizers() []string                       { return nil }
-func (m *mcpNotificationObject) SetFinalizers(finalizers []string)             {}
-func (m *mcpNotificationObject) GetOwnerReferences() []metav1.OwnerReference   { return nil }
-func (m *mcpNotificationObject) SetOwnerReferences([]metav1.OwnerReference)    {}
-func (m *mcpNotificationObject) GetManagedFields() []metav1.ManagedFieldsEntry { return nil }
-func (m *mcpNotificationObject) SetManagedFields([]metav1.ManagedFieldsEntry)  {}
-func (m *mcpNotificationObject) GetObjectKind() schema.ObjectKind              { return schema.EmptyObjectKind }
-func (m *mcpNotificationObject) DeepCopyObject() runtime.Object {
-	return &mcpNotificationObject{name: m.name}
 }
 
 // HandleMachineConfigPool handles MCP create/update events.
@@ -576,13 +535,13 @@ func (c *CentralNodeStateController) InitializeCaches(ctx context.Context) error
 }
 
 // Start implements manager.Runnable interface.
-// It blocks until the context is cancelled, then performs graceful shutdown.
+// It blocks until the context is canceled, then performs graceful shutdown.
 // T063: Implement manager.Runnable interface
 func (c *CentralNodeStateController) Start(ctx context.Context) error {
 	logger := logf.FromContext(ctx).WithName("central-node-state-controller")
 	logger.Info("Starting central node state controller")
 
-	// Block until context is cancelled
+	// Block until context is canceled
 	<-ctx.Done()
 
 	// T064: Graceful shutdown - close notification channels

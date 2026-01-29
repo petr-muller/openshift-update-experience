@@ -99,11 +99,11 @@ type NodeState struct {
 }
 
 // State store
-type NodeStateStore struct {
+type Store struct {
     states sync.Map  // map[string]*NodeState
 }
 
-func (s *NodeStateStore) Get(nodeName string) (*NodeState, bool) {
+func (s *Store) Get(nodeName string) (*NodeState, bool) {
     v, ok := s.states.Load(nodeName)
     if !ok {
         return nil, false
@@ -111,7 +111,7 @@ func (s *NodeStateStore) Get(nodeName string) (*NodeState, bool) {
     return v.(*NodeState), true
 }
 
-func (s *NodeStateStore) Set(nodeName string, state *NodeState) {
+func (s *Store) Set(nodeName string, state *NodeState) {
     s.states.Store(nodeName, state)
 }
 ```
@@ -483,7 +483,7 @@ if controllers.enableNode {
 func NewNodeProgressInsightReconcilerWithProvider(
     client client.Client,
     scheme *runtime.Scheme,
-    provider nodestate.NodeStateProvider,
+    provider nodestate.Provider,
 ) *NodeProgressInsightReconciler {
     if provider == nil {
         // This should never happen due to main.go check, but defensive

@@ -53,7 +53,7 @@ func NewCentralNodeStateReconciler(client client.Client) *CentralNodeStateReconc
 // GetStateProvider returns the NodeStateProvider interface for downstream controllers.
 // This should be called after the reconciler is created to pass to downstream controllers
 // that need to read node state.
-func (r *CentralNodeStateReconciler) GetStateProvider() nodestate.NodeStateProvider {
+func (r *CentralNodeStateReconciler) GetStateProvider() nodestate.Provider {
 	return r.impl
 }
 

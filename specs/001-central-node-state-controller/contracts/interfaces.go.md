@@ -7,7 +7,7 @@ This document defines the Go interfaces that represent contracts between compone
 
 ---
 
-## 1. NodeStateProvider Interface
+## 1. Provider Interface
 
 **Purpose**: Contract for components that provide access to evaluated node state.
 
@@ -17,10 +17,10 @@ This document defines the Go interfaces that represent contracts between compone
 ```go
 // Package: internal/controller/nodestate
 
-// NodeStateProvider provides read access to evaluated node states.
+// Provider provides read access to evaluated node states.
 // This interface allows downstream controllers to access the centrally
 // maintained node state without direct coupling to the central controller.
-type NodeStateProvider interface {
+type Provider interface {
     // GetNodeState returns the current evaluated state for a node.
     // Returns (state, true) if found, (nil, false) if not tracked.
     GetNodeState(nodeName string) (*NodeState, bool)
@@ -213,7 +213,7 @@ type Checker interface {
 │                  CentralNodeStateController                      │
 │                                                                  │
 │  implements:                                                     │
-│    - NodeStateProvider                                          │
+│    - Provider                                                    │
 │    - StateEvaluator                                             │
 │    - NotificationSender                                         │
 │    - manager.Runnable                                           │
@@ -224,7 +224,7 @@ type Checker interface {
 │    - MetricsRecorder (dependency)                               │
 └─────────────────────────────────────────────────────────────────┘
                               │
-                              │ provides NodeStateProvider
+                              │ provides Provider
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │              Downstream Controllers                              │
