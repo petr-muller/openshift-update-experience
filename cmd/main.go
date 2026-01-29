@@ -54,7 +54,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(openshiftv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(openshiftconfigv1.AddToScheme(scheme))
+	utilruntime.Must(openshiftconfigv1.Install(scheme))
 	utilruntime.Must(openshiftmachineconfigurationv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
@@ -242,9 +242,44 @@ func main() {
 		setupLog.Info("ClusterOperatorProgressInsight controller disabled")
 	}
 
+	// Automatic dependency enablement: CentralNodeState controller is automatically
+	// enabled when NodeProgressInsight controller is enabled
+	enableNodeState := controllers.enableNode
+	if enableNodeState {
+		setupLog.Info("CentralNodeState controller auto-enabled",
+			"reason", "NodeProgressInsight controller is enabled")
+	}
+
+	// CentralNodeState controller must be set up first if enabled, as it provides
+	// the NodeStateProvider for downstream controllers
+	var centralNodeState *controller.CentralNodeStateReconciler
+	if enableNodeState {
+		setupLog.Info("Setting up CentralNodeState controller")
+		centralNodeState = controller.NewCentralNodeStateReconciler(mgr.GetClient())
+		if err = centralNodeState.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "CentralNodeState")
+			os.Exit(1)
+		}
+	} else {
+		setupLog.Info("CentralNodeState controller disabled")
+	}
+
 	if controllers.enableNode {
+		// Fail fast if central controller is not available (should not happen with automatic enablement)
+		if centralNodeState == nil {
+			setupLog.Error(nil, "NodeProgressInsight controller requires CentralNodeState controller",
+				"required-by", "NodeProgressInsight",
+				"missing", "CentralNodeState",
+				"fix", "This is a bug in automatic enablement logic")
+			os.Exit(1)
+		}
+
 		setupLog.Info("Setting up NodeProgressInsight controller")
-		nodeInformer := controller.NewNodeProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())
+		nodeInformer := controller.NewNodeProgressInsightReconciler(
+			mgr.GetClient(),
+			mgr.GetScheme(),
+			centralNodeState.GetStateProvider(),
+		)
 		if err = nodeInformer.SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "NodeProgressInsight")
 			os.Exit(1)
