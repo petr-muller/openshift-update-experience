@@ -3,9 +3,7 @@ package nodes
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
@@ -15,11 +13,9 @@ import (
 	"github.com/petr-muller/openshift-update-experience/internal/mco"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -184,7 +180,7 @@ func assessNode(node *corev1.Node, mcp *openshiftmachineconfigurationv1.MachineC
 	lns := mco.NewLayeredNodeState(node)
 	isUnavailable := lns.IsUnavailable(mcp)
 
-	isDegraded := isNodeDegraded(node)
+	isDegraded := nodestate.IsNodeDegraded(node)
 	isUpdated := foundCurrent && mostRecentVersionInCVHistory == currentVersion &&
 		// The following condition is to handle the multi-arch migration because the version number stays the same there
 		(noDesiredOnNode || currentConfig == desiredConfig)
@@ -194,7 +190,7 @@ func assessNode(node *corev1.Node, mcp *openshiftmachineconfigurationv1.MachineC
 	// at least updating or is updated.
 	isUpdating := !isUpdated && foundCurrent && foundDesired && mostRecentVersionInCVHistory == desiredVersion
 
-	conditions, message, estimate := determineConditions(mcp, node, isUpdating, isUpdated, isUnavailable, isDegraded, lns, existingConditions, now)
+	conditions, message, phase := nodestate.DetermineConditions(mcp, node, isUpdating, isUpdated, isUnavailable, isDegraded, lns, existingConditions, now.Time)
 
 	scope := ouev1alpha1.WorkerPoolScope
 	if mcp.Name == mco.MachineConfigPoolMaster {
@@ -210,7 +206,7 @@ func assessNode(node *corev1.Node, mcp *openshiftmachineconfigurationv1.MachineC
 		},
 		Scope:               scope,
 		Version:             currentVersion,
-		EstimatedToComplete: estimate,
+		EstimatedToComplete: nodestate.EstimateFromPhase(phase, conditions),
 		Message:             message,
 		Conditions:          conditions,
 	}
@@ -247,196 +243,6 @@ func (r *Reconciler) initializeMachineConfigVersions(ctx context.Context) error 
 	}
 
 	return nil
-}
-
-func determineConditions(pool *openshiftmachineconfigurationv1.MachineConfigPool, node *corev1.Node, isUpdating, isUpdated, isUnavailable, isDegraded bool, lns *mco.LayeredNodeState, existingConditions []metav1.Condition, now metav1.Time) ([]metav1.Condition, string, *metav1.Duration) {
-	// Start with only the conditions we manage to avoid accumulating stale conditions
-	// meta.SetStatusCondition will preserve LastTransitionTime when status doesn't change
-	conditions := []metav1.Condition{}
-	for _, cond := range existingConditions {
-		if cond.Type == string(ouev1alpha1.NodeStatusInsightUpdating) ||
-			cond.Type == string(ouev1alpha1.NodeStatusInsightAvailable) ||
-			cond.Type == string(ouev1alpha1.NodeStatusInsightDegraded) {
-			conditions = append(conditions, cond)
-		}
-	}
-
-	var estimate *metav1.Duration
-
-	updating := metav1.Condition{
-		Type:               string(ouev1alpha1.NodeStatusInsightUpdating),
-		Status:             metav1.ConditionUnknown,
-		Reason:             string(ouev1alpha1.NodeCannotDetermine),
-		Message:            "Cannot determine whether the node is updating",
-		LastTransitionTime: now,
-	}
-	available := metav1.Condition{
-		Type:               string(ouev1alpha1.NodeStatusInsightAvailable),
-		Status:             metav1.ConditionTrue,
-		Reason:             "AsExpected",
-		Message:            "The node is available",
-		LastTransitionTime: now,
-	}
-	degraded := metav1.Condition{
-		Type:               string(ouev1alpha1.NodeStatusInsightDegraded),
-		Status:             metav1.ConditionFalse,
-		Reason:             "AsExpected",
-		Message:            "The node is not degraded",
-		LastTransitionTime: now,
-	}
-
-	if isUpdating && isNodeDraining(node, isUpdating) {
-		estimate = ptr.To(metav1.Duration{Duration: 10 * time.Minute})
-		updating.Status = metav1.ConditionTrue
-		updating.Reason = string(ouev1alpha1.NodeDraining)
-		updating.Message = "The node is draining"
-	} else if isUpdating {
-		state := node.Annotations[mco.MachineConfigDaemonStateAnnotationKey]
-		switch state {
-		case mco.MachineConfigDaemonStateRebooting:
-			estimate = ptr.To(metav1.Duration{Duration: 10 * time.Minute})
-			updating.Status = metav1.ConditionTrue
-			updating.Reason = string(ouev1alpha1.NodeRebooting)
-			updating.Message = "The node is rebooting"
-		case mco.MachineConfigDaemonStateDone:
-			estimate = ptr.To(metav1.Duration{})
-			updating.Status = metav1.ConditionFalse
-			updating.Reason = string(ouev1alpha1.NodeCompleted)
-			updating.Message = "The node is updated"
-		default:
-			estimate = ptr.To(metav1.Duration{Duration: 10 * time.Minute})
-			updating.Status = metav1.ConditionTrue
-			updating.Reason = string(ouev1alpha1.NodeUpdating)
-			updating.Message = "The node is updating"
-		}
-
-	} else if isUpdated {
-		estimate = ptr.To(metav1.Duration{Duration: 10 * time.Minute})
-		updating.Status = metav1.ConditionFalse
-		updating.Reason = string(ouev1alpha1.NodeCompleted)
-		updating.Message = "The node is updated"
-	} else if pool.Spec.Paused {
-		estimate = ptr.To(metav1.Duration{Duration: 10 * time.Minute})
-		updating.Status = metav1.ConditionFalse
-		updating.Reason = string(ouev1alpha1.NodePaused)
-		updating.Message = "The update of the node is paused"
-	} else {
-		updating.Status = metav1.ConditionFalse
-		updating.Reason = string(ouev1alpha1.NodeUpdatePending)
-		updating.Message = "The update of the node is pending"
-	}
-
-	// ATM, the insight's message is set only for the interesting cases: (isUnavailable && !isUpdating) || isDegraded
-	// Moreover, the degraded message overwrites the unavailable one.
-	// Those cases are inherited from the "oc adm upgrade" command as the baseline for the insight's message.
-	// https://github.com/openshift/oc/blob/0cd37758b5ebb182ea911c157256c1b812c216c5/pkg/cli/admin/upgrade/status/workerpool.go#L194
-	// We may add more cases in the future as needed
-	var message string
-	if isUnavailable && !isUpdating {
-		estimate = nil
-		if isUpdated {
-			estimate = ptr.To(metav1.Duration{Duration: 0})
-		}
-		available.Status = metav1.ConditionFalse
-		// TODO: Reason should be more informative (e.g., specific unavailability type) but we will handle that in the future
-		available.Reason = "Unavailable"
-		available.Message = lns.GetUnavailableMessage()
-		// Preserve the actual unavailability time from node state, stripping monotonic clock.
-		// If the unavailability time is not known (zero value), fall back to the current time
-		unavailableSince := lns.GetUnavailableSince()
-		if unavailableSince.IsZero() {
-			available.LastTransitionTime = now
-		} else {
-			available.LastTransitionTime = metav1.Time{Time: unavailableSince.Truncate(0)}
-		}
-		message = available.Message
-	}
-
-	if isDegraded {
-		estimate = nil
-		if isUpdated {
-			estimate = ptr.To(metav1.Duration{Duration: 0})
-		}
-		degraded.Status = metav1.ConditionTrue
-		// TODO: Reason should be more informative (e.g., specific degradation type) but we will handle that in the future
-		degraded.Reason = "Degraded"
-		degraded.Message = node.Annotations[mco.MachineConfigDaemonReasonAnnotationKey]
-		message = degraded.Message
-	}
-
-	// Use meta.SetStatusCondition to properly handle LastTransitionTime
-	// It only updates LastTransitionTime when the status actually changes
-	meta.SetStatusCondition(&conditions, updating)
-
-	// Handle Available condition: When a node is unavailable, we manually set LastTransitionTime
-	// to preserve the actual unavailability timestamp from GetUnavailableSince() (the time when
-	// the node actually became unavailable according to the Machine Config Operator).
-	// This is more accurate than using meta.SetStatusCondition, which would set it to the time
-	// we first detected the unavailability in our reconciliation loop.
-	//
-	// We cannot use meta.SetStatusCondition when we've manually set LastTransitionTime because
-	// it manages that field automatically and would either overwrite our timestamp or cause
-	// unnecessary updates. Therefore, we manually manage the Available condition in this case
-	// by removing any existing Available condition and appending our manually-timestamped one.
-	if isUnavailable && !isUpdating {
-		// Remove existing Available condition and add our manually-timestamped one
-		var filteredConditions []metav1.Condition
-		for _, c := range conditions {
-			if c.Type != string(ouev1alpha1.NodeStatusInsightAvailable) {
-				filteredConditions = append(filteredConditions, c)
-			}
-		}
-		filteredConditions = append(filteredConditions, available)
-		conditions = filteredConditions
-	} else {
-		meta.SetStatusCondition(&conditions, available)
-	}
-
-	meta.SetStatusCondition(&conditions, degraded)
-
-	return conditions, message, estimate
-}
-
-func isNodeDraining(node *corev1.Node, isUpdating bool) bool {
-	desiredDrain := node.Annotations[mco.DesiredDrainerAnnotationKey]
-	appliedDrain := node.Annotations[mco.LastAppliedDrainerAnnotationKey]
-
-	if appliedDrain == "" || desiredDrain == "" {
-		return false
-	}
-
-	if desiredDrain != appliedDrain {
-		desiredVerb := strings.Split(desiredDrain, "-")[0]
-		if desiredVerb == mco.DrainerStateDrain {
-			return true
-		}
-	}
-
-	// Node is supposed to be updating but MCD hasn't had the time to update
-	// its state from original `Done` to `Working` and start the drain process.
-	// Default to drain process so that we don't report completed.
-	mcdState := node.Annotations[mco.MachineConfigDaemonStateAnnotationKey]
-	return isUpdating && mcdState == mco.MachineConfigDaemonStateDone
-}
-
-func isNodeDegraded(node *corev1.Node) bool {
-	// Inspired by: https://github.com/openshift/machine-config-operator/blob/master/pkg/controller/node/status.go
-	if node.Annotations == nil {
-		return false
-	}
-	dconfig, ok := node.Annotations[mco.DesiredMachineConfigAnnotationKey]
-	if !ok || dconfig == "" {
-		return false
-	}
-	dstate, ok := node.Annotations[mco.MachineConfigDaemonStateAnnotationKey]
-	if !ok || dstate == "" {
-		return false
-	}
-
-	if dstate == mco.MachineConfigDaemonStateDegraded || dstate == mco.MachineConfigDaemonStateUnreconcilable {
-		return true
-	}
-	return false
 }
 
 func (r *Reconciler) HandleDeletedMachineConfigPool(ctx context.Context, object client.Object) []reconcile.Request {

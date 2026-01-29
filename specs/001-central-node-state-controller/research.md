@@ -60,12 +60,12 @@ func (c *CentralNodeStateController) notifyNodeInsightControllers(ctx context.Co
 
 ### Alternatives Considered
 
-| Alternative | Rejected Because |
-|-------------|------------------|
-| Watch internal CRD | Would add API latency; defeats purpose of avoiding duplicate evaluations |
+| Alternative               | Rejected Because                                                            |
+|---------------------------|-----------------------------------------------------------------------------|
+| Watch internal CRD        | Would add API latency; defeats purpose of avoiding duplicate evaluations    |
 | Shared callback interface | Less idiomatic; source.Channel integrates with controller-runtime lifecycle |
-| Direct function calls | Bypasses workqueue; loses deduplication and rate limiting benefits |
-| Custom event bus | Over-engineering; source.Channel provides exactly what's needed |
+| Direct function calls     | Bypasses workqueue; loses deduplication and rate limiting benefits          |
+| Custom event bus          | Over-engineering; source.Channel provides exactly what's needed             |
 
 ---
 
@@ -75,7 +75,7 @@ func (c *CentralNodeStateController) notifyNodeInsightControllers(ctx context.Co
 Use a dedicated `NodeState` struct loosely coupled from `NodeProgressInsightStatus`, stored in a `sync.Map` keyed by node name.
 
 ### Rationale
-- Allows internal representation to evolve independently from CRD schema
+- Allows internal representation to evolve independently of CRD schema
 - `sync.Map` provides thread-safe access without explicit locking for typical read/write patterns
 - Decoupling enables storing additional internal data (timestamps, metrics) not exposed in CRD
 - Downstream controllers can access state directly via pointer (zero-copy for reads)
@@ -99,11 +99,11 @@ type NodeState struct {
 }
 
 // State store
-type NodeStateStore struct {
+type Store struct {
     states sync.Map  // map[string]*NodeState
 }
 
-func (s *NodeStateStore) Get(nodeName string) (*NodeState, bool) {
+func (s *Store) Get(nodeName string) (*NodeState, bool) {
     v, ok := s.states.Load(nodeName)
     if !ok {
         return nil, false
@@ -111,18 +111,18 @@ func (s *NodeStateStore) Get(nodeName string) (*NodeState, bool) {
     return v.(*NodeState), true
 }
 
-func (s *NodeStateStore) Set(nodeName string, state *NodeState) {
+func (s *Store) Set(nodeName string, state *NodeState) {
     s.states.Store(nodeName, state)
 }
 ```
 
 ### Alternatives Considered
 
-| Alternative | Rejected Because |
-|-------------|------------------|
+| Alternative                                | Rejected Because                                                            |
+|--------------------------------------------|-----------------------------------------------------------------------------|
 | Reuse `NodeProgressInsightStatus` directly | Couples internal and external representations; can't store internal metrics |
-| Regular map with mutex | sync.Map is more efficient for concurrent read-heavy workloads |
-| Per-node channels | Overhead for many nodes; harder to maintain; batch operations difficult |
+| Regular map with mutex                     | sync.Map is more efficient for concurrent read-heavy workloads              |
+| Per-node channels                          | Overhead for many nodes; harder to maintain; batch operations difficult     |
 
 ---
 
@@ -162,11 +162,11 @@ func main() {
 
 ### Alternatives Considered
 
-| Alternative | Rejected Because |
-|-------------|------------------|
-| Runtime registry with Register/Deregister methods | Over-engineering for static controller set; adds synchronization complexity |
-| Interface-based discovery | Adds abstraction without benefit; downstream controllers known at compile time |
-| Service locator pattern | Anti-pattern; explicit dependency injection is clearer |
+| Alternative                                       | Rejected Because                                                               |
+|---------------------------------------------------|--------------------------------------------------------------------------------|
+| Runtime registry with Register/Deregister methods | Over-engineering for static controller set; adds synchronization complexity    |
+| Interface-based discovery                         | Adds abstraction without benefit; downstream controllers known at compile time |
+| Service locator pattern                           | Anti-pattern; explicit dependency injection is clearer                         |
 
 ---
 
@@ -239,12 +239,12 @@ func init() {
 
 ### Metrics Defined
 
-| Metric | Type | Labels | Purpose |
-|--------|------|--------|---------|
-| `oue_node_state_evaluation_duration_seconds` | Histogram | node | Track per-node evaluation timing |
-| `oue_node_state_evaluation_total` | Counter | node, result | Count evaluations and errors |
-| `oue_downstream_notification_duration_seconds` | Histogram | controller_type | Track notification latency |
-| `oue_active_node_states` | Gauge | - | Track state store size |
+| Metric                                         | Type      | Labels          | Purpose                          |
+|------------------------------------------------|-----------|-----------------|----------------------------------|
+| `oue_node_state_evaluation_duration_seconds`   | Histogram | node            | Track per-node evaluation timing |
+| `oue_node_state_evaluation_total`              | Counter   | node, result    | Count evaluations and errors     |
+| `oue_downstream_notification_duration_seconds` | Histogram | controller_type | Track notification latency       |
+| `oue_active_node_states`                       | Gauge     | -               | Track state store size           |
 
 ---
 
@@ -287,11 +287,11 @@ func (c *CentralNodeStateController) evaluateNode(ctx context.Context, node *cor
 
 ### Alternatives Considered
 
-| Alternative | Rejected Because |
-|-------------|------------------|
+| Alternative                    | Rejected Because                                                     |
+|--------------------------------|----------------------------------------------------------------------|
 | Full OpenTelemetry integration | Adds significant complexity; not required for initial implementation |
-| No observability | Violates spec requirement for "full observability" |
-| Custom tracing library | Reinventing the wheel; structured logging is sufficient |
+| No observability               | Violates spec requirement for "full observability"                   |
+| Custom tracing library         | Reinventing the wheel; structured logging is sufficient              |
 
 ---
 
@@ -302,12 +302,12 @@ Extract and relocate existing node state evaluation logic from `internal/control
 
 ### Components to Move to `internal/controller/nodestate/`
 
-| Current Location | New Location | Purpose |
-|------------------|--------------|---------|
-| `nodes/mcpselectorcache.go` | `nodestate/mcpselectorcache.go` | MCP selector caching |
-| `nodes/mcversioncache.go` | `nodestate/mcversioncache.go` | MachineConfig version caching |
-| `nodes/impl.go:assessNode()` | `nodestate/assess.go` | Node state assessment logic |
-| `nodes/impl.go:determineConditions()` | `nodestate/conditions.go` | Condition determination |
+| Current Location                      | New Location                    | Purpose                       |
+|---------------------------------------|---------------------------------|-------------------------------|
+| `nodes/mcpselectorcache.go`           | `nodestate/mcpselectorcache.go` | MCP selector caching          |
+| `nodes/mcversioncache.go`             | `nodestate/mcversioncache.go`   | MachineConfig version caching |
+| `nodes/impl.go:assessNode()`          | `nodestate/assess.go`           | Node state assessment logic   |
+| `nodes/impl.go:determineConditions()` | `nodestate/conditions.go`       | Condition determination       |
 
 ### Rationale
 - Caches are needed by central controller, not downstream
@@ -405,11 +405,11 @@ if enableNodeState {
 
 ### Alternatives Considered
 
-| Alternative | Rejected Because |
-|-------------|------------------|
-| Dependency injection framework | Too heavyweight for single use case |
+| Alternative                                | Rejected Because                                  |
+|--------------------------------------------|---------------------------------------------------|
+| Dependency injection framework             | Too heavyweight for single use case               |
 | Manager extension with dependency tracking | Would require custom manager wrapper, too complex |
-| Environment variable | Less discoverable than command-line flag logic |
+| Environment variable                       | Less discoverable than command-line flag logic    |
 
 ---
 
@@ -442,10 +442,10 @@ No other changes required.
 
 ### Alternatives Considered
 
-| Alternative | Rejected Because |
-|-------------|------------------|
-| Dummy flag with deprecation warning | Adds unnecessary code complexity |
-| Silently ignore unknown flags | Would require custom flag parsing |
+| Alternative                         | Rejected Because                  |
+|-------------------------------------|-----------------------------------|
+| Dummy flag with deprecation warning | Adds unnecessary code complexity  |
+| Silently ignore unknown flags       | Would require custom flag parsing |
 
 ---
 
@@ -483,7 +483,7 @@ if controllers.enableNode {
 func NewNodeProgressInsightReconcilerWithProvider(
     client client.Client,
     scheme *runtime.Scheme,
-    provider nodestate.NodeStateProvider,
+    provider nodestate.Provider,
 ) *NodeProgressInsightReconciler {
     if provider == nil {
         // This should never happen due to main.go check, but defensive
@@ -505,11 +505,11 @@ func NewNodeProgressInsightReconcilerWithProvider(
 
 ### Alternatives Considered
 
-| Alternative | Rejected Because |
-|-------------|------------------|
-| Silent degradation | Would hide bugs in automatic enablement |
-| Runtime error in Reconcile | Harder to debug, continuous failures |
-| Constructor validation only | Would panic, less clear error message |
+| Alternative                 | Rejected Because                        |
+|-----------------------------|-----------------------------------------|
+| Silent degradation          | Would hide bugs in automatic enablement |
+| Runtime error in Reconcile  | Harder to debug, continuous failures    |
+| Constructor validation only | Would panic, less clear error message   |
 
 ---
 
@@ -547,11 +547,11 @@ Use phased test migration: audit → verify → validate
 
 ### Alternatives Considered
 
-| Alternative | Rejected Because |
-|-------------|------------------|
-| No formal audit | Risky, might miss test coverage gaps |
-| Convert legacy tests to provider tests | Unnecessary duplication, provider tests already exist |
-| Keep legacy tests as "defense in depth" | Would test non-existent code path |
+| Alternative                             | Rejected Because                                      |
+|-----------------------------------------|-------------------------------------------------------|
+| No formal audit                         | Risky, might miss test coverage gaps                  |
+| Convert legacy tests to provider tests  | Unnecessary duplication, provider tests already exist |
+| Keep legacy tests as "defense in depth" | Would test non-existent code path                     |
 
 ---
 
@@ -559,12 +559,12 @@ Use phased test migration: audit → verify → validate
 
 ### Key Decisions for Refactoring
 
-| Research Question | Decision | Rationale |
-|------------------|----------|-----------|
-| Automatic enablement pattern | Simple conditional in main.go | Transparent, debuggable, follows controller-runtime patterns |
-| Flag removal handling | Remove entirely, document breaking change | Clean removal, spec allows breaking changes |
-| Missing dependency error | Fail fast in main.go setup | Clear error message, fails before manager starts |
-| Test coverage verification | Phased audit → verify → validate | Ensures no coverage loss, systematic approach |
+| Research Question            | Decision                                  | Rationale                                                    |
+|------------------------------|-------------------------------------------|--------------------------------------------------------------|
+| Automatic enablement pattern | Simple conditional in main.go             | Transparent, debuggable, follows controller-runtime patterns |
+| Flag removal handling        | Remove entirely, document breaking change | Clean removal, spec allows breaking changes                  |
+| Missing dependency error     | Fail fast in main.go setup                | Clear error message, fails before manager starts             |
+| Test coverage verification   | Phased audit → verify → validate          | Ensures no coverage loss, systematic approach                |
 
 ### Implementation Checklist
 

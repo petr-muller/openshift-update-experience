@@ -181,7 +181,7 @@ The refactoring is purely about controller lifecycle management and internal cod
 ### API Contracts
 
 **No new API contracts**. Existing contracts remain:
-- `nodestate.NodeStateProvider` interface (already implemented by CentralNodeStateReconciler)
+- `nodestate.Provider` interface (already implemented by CentralNodeStateReconciler)
 - NodeProgressInsight CRD status updates (unchanged)
 
 ### Configuration Changes

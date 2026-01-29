@@ -5,9 +5,11 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
 )
 
 // T007: Unit tests for NodeState struct and UpdatePhase constants
@@ -137,7 +139,7 @@ func TestNodeState_ComputeHash_EmptyConditions(t *testing.T) {
 // T008: Unit tests for NodeStateStore
 
 func TestNodeStateStore_GetSetDelete(t *testing.T) {
-	store := &NodeStateStore{}
+	store := &Store{}
 
 	// Get on empty store returns false
 	state, ok := store.Get("node-1")
@@ -185,7 +187,7 @@ func TestNodeStateStore_GetSetDelete(t *testing.T) {
 }
 
 func TestNodeStateStore_Range(t *testing.T) {
-	store := &NodeStateStore{}
+	store := &Store{}
 
 	// Set up test data
 	nodes := []*NodeState{
@@ -225,7 +227,7 @@ func TestNodeStateStore_Range(t *testing.T) {
 }
 
 func TestNodeStateStore_Count(t *testing.T) {
-	store := &NodeStateStore{}
+	store := &Store{}
 
 	// Empty store
 	if count := store.Count(); count != 0 {
@@ -252,7 +254,7 @@ func TestNodeStateStore_Count(t *testing.T) {
 }
 
 func TestNodeStateStore_GetAll(t *testing.T) {
-	store := &NodeStateStore{}
+	store := &Store{}
 
 	// Empty store returns empty slice
 	all := store.GetAll()
@@ -288,7 +290,7 @@ func TestNodeStateStore_GetAll(t *testing.T) {
 }
 
 func TestNodeStateStore_GetByPool(t *testing.T) {
-	store := &NodeStateStore{}
+	store := &Store{}
 
 	// Set up test data with different pools
 	nodes := []*NodeState{
@@ -339,7 +341,7 @@ func TestNodeStateStore_GetByPool(t *testing.T) {
 }
 
 func TestNodeStateStore_UpdateExisting(t *testing.T) {
-	store := &NodeStateStore{}
+	store := &Store{}
 
 	// Initial state
 	initial := &NodeState{
@@ -362,6 +364,11 @@ func TestNodeStateStore_UpdateExisting(t *testing.T) {
 	if !ok {
 		t.Error("expected Get to return true after update")
 	}
+
+	if retrieved == nil {
+		t.Fatalf("expected updated phase %s, got retrieved=nil", UpdatePhaseUpdating)
+	}
+
 	if retrieved.Phase != UpdatePhaseUpdating {
 		t.Errorf("expected updated phase %s, got %s", UpdatePhaseUpdating, retrieved.Phase)
 	}
