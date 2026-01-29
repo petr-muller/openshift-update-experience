@@ -31,14 +31,14 @@ make build  # Should succeed
    ```
    internal/controller/nodestate/
    ├── doc.go              # Package documentation
-   ├── state.go            # NodeState and NodeStateStore
+   ├── state.go            # NodeState and Store
    ├── state_test.go
    ├── caches.go           # Moved MCP selector and MC version caches
    ├── caches_test.go
    └── metrics.go          # Prometheus metrics registration
    ```
 
-2. **Implement NodeState and NodeStateStore**
+2. **Implement NodeState and Store**
    - Define structs from data-model.md
    - Implement Get/Set/Delete/Range methods
    - Add hash computation for change detection
@@ -50,7 +50,7 @@ make build  # Should succeed
 
 ### Phase 2: Central Controller
 
-4. **Implement central controller**
+1. **Implement central controller**
    ```
    internal/controller/nodestate/
    ├── impl.go             # Central controller implementation
@@ -61,46 +61,46 @@ make build  # Should succeed
    └── conditions_test.go
    ```
 
-5. **Create thin wrapper**
+2. **Create thin wrapper**
    ```
    internal/controller/nodestate_controller.go  # SetupWithManager, watches
    ```
 
-6. **Implement notification channels**
+3. **Implement notification channels**
    - Create channels for downstream controllers
    - Implement non-blocking send with context
 
 ### Phase 3: Integration
 
-7. **Update cmd/main.go**
+1. **Update cmd/main.go**
    - Add `--enable-node-state-controller` flag
    - Create central controller before downstream controllers
    - Pass channel references to downstream controllers
 
-8. **Refactor NodeProgressInsight controller**
+2. **Refactor NodeProgressInsight controller**
    - Remove internal caches (use central)
    - Add source.Channel watch
    - Read state from central store
    - Simplify to just CRD status updates
 
-9. **Prepare for MCPProgressInsight controller**
+3. **Prepare for MCPProgressInsight controller**
    - Add channel for future MCP insight controller
    - Document integration pattern
 
 ### Phase 4: Testing & Observability
 
-10. **Add unit tests**
-    - NodeState and store tests
-    - Assessment function tests
-    - Notification flow tests
+1. **Add unit tests**
+   - NodeState and store tests
+   - Assessment function tests
+   - Notification flow tests
 
-11. **Add integration tests**
-    - Controller lifecycle tests with envtest
-    - Multi-controller coordination tests
+2. **Add integration tests**
+   - Controller lifecycle tests with envtest
+   - Multi-controller coordination tests
 
-12. **Implement metrics**
-    - Register Prometheus metrics
-    - Add metric recording to key operations
+3. **Implement metrics**
+   - Register Prometheus metrics
+   - Add metric recording to key operations
 
 ---
 
@@ -117,7 +117,7 @@ type CentralNodeStateController struct {
     Scheme *runtime.Scheme
 
     // State management
-    store          *NodeStateStore
+    store          *Store
     mcpSelectors   *MachineConfigPoolSelectorCache
     mcVersions     *MachineConfigVersionCache
 
@@ -135,7 +135,7 @@ func NewCentralNodeStateController(c client.Client, s *runtime.Scheme) *CentralN
     return &CentralNodeStateController{
         Client:          c,
         Scheme:          s,
-        store:           &NodeStateStore{},
+        store:           &Store{},
         mcpSelectors:    &MachineConfigPoolSelectorCache{},
         mcVersions:      &MachineConfigVersionCache{},
         nodeInsightChan: make(chan event.GenericEvent, 1024),
@@ -227,7 +227,7 @@ make test
 go test ./internal/controller/nodestate/... -v
 
 # Run specific test
-go test -run TestNodeStateStore ./internal/controller/nodestate -v
+go test -run TestStore ./internal/controller/nodestate -v
 
 # Run with race detector
 go test -race ./internal/controller/nodestate/...
@@ -284,4 +284,4 @@ case <-ctx.Done():
 - [spec.md](./spec.md) - Feature specification
 - [research.md](./research.md) - Technical research and decisions
 - [data-model.md](./data-model.md) - Data structure definitions
-- [contracts/](./contracts/) - Go interface definitions
+- [contracts/](./contracts) - Go interface definitions

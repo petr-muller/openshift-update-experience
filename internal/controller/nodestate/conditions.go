@@ -4,12 +4,14 @@ import (
 	"strings"
 	"time"
 
-	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
-	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
-	"github.com/petr-muller/openshift-update-experience/internal/mco"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
+
+	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
+	"github.com/petr-muller/openshift-update-experience/internal/mco"
 )
 
 // DetermineConditions evaluates node state and returns conditions, message, and update phase.
@@ -27,7 +29,7 @@ func DetermineConditions(
 
 	// Start with only the conditions we manage to avoid accumulating stale conditions
 	// meta.SetStatusCondition will preserve LastTransitionTime when status doesn't change
-	conditions := []metav1.Condition{}
+	var conditions []metav1.Condition
 	for _, cond := range existingConditions {
 		if cond.Type == string(ouev1alpha1.NodeStatusInsightUpdating) ||
 			cond.Type == string(ouev1alpha1.NodeStatusInsightAvailable) ||
@@ -60,7 +62,7 @@ func DetermineConditions(
 		LastTransitionTime: metaNow,
 	}
 
-	if isUpdating && isNodeDraining(node, isUpdating) {
+	if isUpdating && IsNodeDraining(node, isUpdating) {
 		phase = UpdatePhaseDraining
 		updating.Status = metav1.ConditionTrue
 		updating.Reason = string(ouev1alpha1.NodeDraining)
@@ -165,8 +167,8 @@ func DetermineConditions(
 	return conditions, message, phase
 }
 
-// isNodeDraining checks if a node is currently in the draining phase.
-func isNodeDraining(node *corev1.Node, isUpdating bool) bool {
+// IsNodeDraining checks if a node is currently in the draining phase.
+func IsNodeDraining(node *corev1.Node, isUpdating bool) bool {
 	desiredDrain := node.Annotations[mco.DesiredDrainerAnnotationKey]
 	appliedDrain := node.Annotations[mco.LastAppliedDrainerAnnotationKey]
 

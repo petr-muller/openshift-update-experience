@@ -89,8 +89,8 @@ The **CentralNodeStateController** provides centralized node state evaluation:
   - Notification channels for reactive updates via `source.Channel`
   - Graceful degradation (works with 0 to N downstream controllers)
 - **Architecture**:
-  - Evaluates node state in `Reconcile()` and stores in thread-safe `NodeStateStore`
-  - Downstream controllers read via `NodeStateProvider` interface
+  - Evaluates node state in `Reconcile()` and stores in thread-safe `Store`
+  - Downstream controllers read via `Provider` interface
   - Notifications sent via buffered channels (1024 buffer) on state changes
   - Implements `manager.Runnable` for lifecycle management
 - **Observability**:
@@ -104,7 +104,7 @@ The **CentralNodeStateController** provides centralized node state evaluation:
 
 - **internal/controller/nodestate/** - **Central node state controller (NEW)**
   - `impl.go` - Central controller with state evaluation and notification
-  - `state.go` - NodeState struct, UpdatePhase constants, NodeStateStore
+  - `state.go` - NodeState struct, UpdatePhase constants, Store
   - `assess.go` - Node state evaluation logic (extracted from nodes controller)
   - `conditions.go` - Condition determination logic
   - `caches.go` - MCP selector and MC version caches
@@ -175,6 +175,15 @@ The central controller exposes Prometheus metrics:
 - In-memory only (sync.Map for central controller state cache) (001-central-node-state-controller)
 
 ## Recent Changes
+- **Code Refactoring & Cleanup** (2026-01-29): Post-implementation cleanups and standardizations
+  - **Interface Renames**: `NodeStateProvider` → `Provider`, `NodeStateStore` → `Store`, `NodeStateToUID()` → `ToUID()`
+  - **Function Exports**: `isNodeDegraded()` → `IsNodeDegraded()`, `isNodeDraining()` → `IsNodeDraining()` (made public for cross-package reuse)
+  - **Code Deduplication**: Removed ~200 lines of duplicate condition/assessment logic from `nodes/impl.go`, eliminated duplicate test setup code via helpers
+  - **Removed Unused Code**: `AssessNodeForInsight()` wrapper, `mcpNotificationObject` type (replaced with actual MachineConfigPool objects)
+  - **Import Organization**: Standardized to Go conventions (stdlib, third-party, local with blank line separators)
+  - **Code Quality**: Spelling fixes, empty slice initialization improvements, handled ignored return values, variable shadowing fixes
+  - **API Pattern**: Changed `openshiftconfigv1.AddToScheme()` → `openshiftconfigv1.Install()` (preferred OpenShift pattern)
+
 - **Legacy Mode Removal & Automatic Dependency Enablement** (2025-01): Simplified central node state controller architecture
   - **BREAKING CHANGE**: Removed `--enable-node-state-controller` flag (previously defaulted to true)
   - Central controller now automatically enables when `--enable-node-controller=true`

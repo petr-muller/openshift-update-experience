@@ -2,30 +2,48 @@
 
 **Feature Branch**: `001-central-node-state-controller`
 **Created**: 2026-01-16
-**Status**: Implemented (followup refactoring planned)
-**Input**: User description: "I want to make the internal controller structure more efficient, possibly at the cost of not entirely respecting controller-runtime best practices. Both the MCP progress insights and Node progress insights actually need to have access to evaluated Node states. This could be implemented through a new central controller that would watch Nodes, and potentially MCPs and MachineConfigs, just like the current NodeProgressInsight does. This controller would served as a backend, and would track basically NodeProgressInsights, but not in the k8s API surface, but internally (and in a data structure only loosely coupled with actual NodeProgressInsights). The controllers reconciling the actual Node- and MachineConfigPoolProgress insights would be downstream of this controller. They would register themselves with this controller internally, and their reconciliation would be triggered by the central controller after the central state is maintained."
+**Status**: Implemented & Refactored (complete)
+**Input**: User description: "I want to make the internal controller structure more efficient, possibly at the cost of not entirely respecting controller-runtime best practices. Both the MCP progress insights and Node progress insights actually need to have access to evaluated Node states. This could be implemented through a new central controller that would watch Nodes, and potentially MCPs and MachineConfigs, just like the current NodeProgressInsight does. This controller would serve as a backend, and would track basically NodeProgressInsights, but not in the k8s API surface, but internally (and in a data structure only loosely coupled with actual NodeProgressInsights). The controllers reconciling the actual Node- and MachineConfigPoolProgress insights would be downstream of this controller. They would register themselves with this controller internally, and their reconciliation would be triggered by the central controller after the central state is maintained."
 
 ## Implementation Status & Followup Work
 
-### Current Implementation (Delivered)
+### ✅ Current Implementation (Complete)
 
-The Central Node State Controller has been delivered with the following architecture:
-- **Flag**: `--enable-node-state-controller` (default: true) controls central controller enablement
-- **Provider Mode**: When central controller is enabled, NodeProgressInsight reads from centralized state
-- **Legacy Mode**: When central controller is disabled, NodeProgressInsight evaluates state independently
-- **Dual-Mode Architecture**: NodeProgressInsight controller supports both modes with runtime switching
+The Central Node State Controller has been fully implemented and refactored with the following architecture:
+- **Automatic Dependency**: Central controller automatically enables when `--enable-node-controller=true` (no separate flag needed)
+- **Provider Mode Only**: NodeProgressInsight always reads from centralized state (legacy mode removed)
+- **Simplified Architecture**: Single code path, no dual-mode complexity
 
-### Planned Followup Refactoring
+### ✅ Code Refactoring & Cleanup (Complete - 2026-01-29)
 
-**Goal**: Simplify the architecture by removing the user-facing flag and legacy mode, treating the central controller as an internal dependency.
+**Interface & Type Simplifications**:
+- Renamed `NodeStateProvider` → `Provider` (shorter, clearer in package context)
+- Renamed `NodeStateStore` → `Store` (shorter, clearer in package context)
+- Renamed `NodeStateToUID()` → `ToUID()` (consistent with type rename)
+- Exported `isNodeDegraded()` → `IsNodeDegraded()` (reusable across packages)
+- Exported `isNodeDraining()` → `IsNodeDraining()` (reusable across packages)
 
-**Changes**:
-1. **Remove `--enable-node-state-controller` flag**: Central controller enablement becomes internal decision
-2. **Remove legacy mode entirely**: NodeProgressInsight always operates in provider mode (reads from central controller)
-3. **Automatic dependency enablement**: Central controller is automatically enabled when at least one dependent controller (`--enable-node-controller` or `--enable-mcp-progress-controller`) is enabled
-4. **Simplified codebase**: Remove dual-mode support code from NodeProgressInsight controller
+**Code Deduplication**:
+- Removed duplicate `determineConditions()` from `nodes/impl.go` (already exists in `nodestate.DetermineConditions()`)
+- Removed duplicate `isNodeDegraded()` and `isNodeDraining()` from `nodes/impl.go` (now using exported versions from `nodestate`)
+- Removed unused `AssessNodeForInsight()` wrapper function
+- Removed `mcpNotificationObject` type (replaced with actual `MachineConfigPool` objects with name set)
+- Created test helpers to eliminate 200+ lines of duplicate setup code:
+  - `prepareCentralNodeStateController()` - common controller setup with node, pools, configs, ClusterVersion
+  - `prepareController()` - simpler controller setup for basic tests
+  - `preparePoolsWithMultipleNodes()` - multi-node test fixture setup
+  - `checkUpdatingWithReason()` - assertion helper for update phase verification
 
-**Rationale**: The legacy mode was included as a safety mechanism during initial rollout. Now that the central controller is proven stable, the added complexity of maintaining two code paths is unnecessary. Making the central controller an internal dependency simplifies the user experience (fewer flags) and reduces maintenance burden.
+**Code Quality Improvements**:
+- Standardized import organization (stdlib, third-party, local with blank line separators)
+- Fixed spelling: `cancelled` → `canceled` (American English)
+- Improved empty slice initialization: `conditions := []metav1.Condition{}` → `var conditions []metav1.Condition`
+- Handled ignored return values: `h.Write(bytes)` → `_, _ = h.Write(bytes)`
+- Fixed variable shadowing: `ctrl` → `c` in `NewCentralNodeStateControllerWithOptions()`
+- Removed unused imports from `nodes/impl.go` (strings, time, ptr, meta)
+- Changed to preferred OpenShift API pattern: `openshiftconfigv1.AddToScheme()` → `openshiftconfigv1.Install()`
+
+**Rationale**: These cleanups improve code maintainability, reduce duplication, and align with Go best practices. The refactoring maintains identical behavior while reducing code size and complexity.
 
 ## User Scenarios & Testing *(mandatory)*
 

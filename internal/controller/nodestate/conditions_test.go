@@ -174,14 +174,15 @@ func TestDetermineConditions_Draining(t *testing.T) {
 	}
 
 	lns := mco.NewLayeredNodeState(node)
-
 	conditions, _, phase := DetermineConditions(pool, node, true, false, false, false, lns, nil, now)
+	checkUpdatingWithReason(t, conditions, phase, UpdatePhaseDraining, ouev1alpha1.NodeDraining)
+}
 
-	if phase != UpdatePhaseDraining {
-		t.Errorf("expected phase %q, got %q", UpdatePhaseDraining, phase)
+func checkUpdatingWithReason(t *testing.T, conditions []metav1.Condition, phase, expectedPhase UpdatePhase, expectedReason ouev1alpha1.NodeUpdatingReason) {
+	if phase != expectedPhase {
+		t.Errorf("expected phase %q, got %q", expectedPhase, phase)
 	}
 
-	// Check Updating condition has Draining reason
 	var updatingCond *metav1.Condition
 	for i := range conditions {
 		if conditions[i].Type == string(ouev1alpha1.NodeStatusInsightUpdating) {
@@ -192,8 +193,8 @@ func TestDetermineConditions_Draining(t *testing.T) {
 	if updatingCond == nil {
 		t.Fatal("expected Updating condition to be present")
 	}
-	if updatingCond.Reason != string(ouev1alpha1.NodeDraining) {
-		t.Errorf("expected Updating reason %q, got %q", ouev1alpha1.NodeDraining, updatingCond.Reason)
+	if updatingCond.Reason != string(expectedReason) {
+		t.Errorf("expected Updating reason %q, got %q", expectedReason, updatingCond.Reason)
 	}
 }
 
@@ -217,27 +218,8 @@ func TestDetermineConditions_Paused(t *testing.T) {
 	}
 
 	lns := mco.NewLayeredNodeState(node)
-
 	conditions, _, phase := DetermineConditions(pool, node, false, false, false, false, lns, nil, now)
-
-	if phase != UpdatePhasePaused {
-		t.Errorf("expected phase %q, got %q", UpdatePhasePaused, phase)
-	}
-
-	// Check Updating condition has Paused reason
-	var updatingCond *metav1.Condition
-	for i := range conditions {
-		if conditions[i].Type == string(ouev1alpha1.NodeStatusInsightUpdating) {
-			updatingCond = &conditions[i]
-			break
-		}
-	}
-	if updatingCond == nil {
-		t.Fatal("expected Updating condition to be present")
-	}
-	if updatingCond.Reason != string(ouev1alpha1.NodePaused) {
-		t.Errorf("expected Updating reason %q, got %q", ouev1alpha1.NodePaused, updatingCond.Reason)
-	}
+	checkUpdatingWithReason(t, conditions, phase, UpdatePhasePaused, ouev1alpha1.NodePaused)
 }
 
 func TestDetermineConditions_Degraded(t *testing.T) {
@@ -492,7 +474,7 @@ func TestIsNodeDraining(t *testing.T) {
 				},
 			}
 
-			result := isNodeDraining(node, tc.isUpdating)
+			result := IsNodeDraining(node, tc.isUpdating)
 
 			if result != tc.expected {
 				t.Errorf("expected %v, got %v", tc.expected, result)

@@ -54,7 +54,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(openshiftv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(openshiftconfigv1.AddToScheme(scheme))
+	utilruntime.Must(openshiftconfigv1.Install(scheme))
 	utilruntime.Must(openshiftmachineconfigurationv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
@@ -275,7 +275,7 @@ func main() {
 		}
 
 		setupLog.Info("Setting up NodeProgressInsight controller")
-		nodeInformer := controller.NewNodeProgressInsightReconcilerWithProvider(
+		nodeInformer := controller.NewNodeProgressInsightReconciler(
 			mgr.GetClient(),
 			mgr.GetScheme(),
 			centralNodeState.GetStateProvider(),

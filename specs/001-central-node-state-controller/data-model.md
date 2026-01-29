@@ -83,15 +83,15 @@ Pending → Draining → Updating → Rebooting → Completed
 
 ---
 
-### 2. NodeStateStore
+### 2. Store
 
 **Purpose**: Thread-safe storage for all NodeState instances.
 
 **Package**: `internal/controller/nodestate`
 
 ```go
-// NodeStateStore provides thread-safe storage and retrieval of NodeState instances.
-type NodeStateStore struct {
+// Store provides thread-safe storage and retrieval of NodeState instances.
+type Store struct {
     states sync.Map  // map[string]*NodeState (key: node name)
 }
 
@@ -237,7 +237,7 @@ type MachineConfigVersionCache struct {
 │                    CentralNodeStateController                    │
 │                                                                  │
 │  ┌──────────────────┐    ┌──────────────────────────────────┐  │
-│  │ NodeStateStore   │    │ MachineConfigPoolSelectorCache   │  │
+│  │ Store            │    │ MachineConfigPoolSelectorCache   │  │
 │  │                  │    │                                   │  │
 │  │  sync.Map:       │    │  sync.Map:                       │  │
 │  │  nodeName →      │    │  mcpName → labels.Selector       │  │
@@ -276,32 +276,32 @@ type MachineConfigVersionCache struct {
 
 1. **Trigger**: Node/MCP/MachineConfig/ClusterVersion change detected
 2. **Evaluation**: Central controller evaluates affected node(s)
-3. **Storage**: Updated NodeState stored in NodeStateStore
+3. **Storage**: Updated NodeState stored in Store
 4. **Notification**: GenericEvent sent to appropriate channel(s)
 5. **Reconciliation**: Downstream controller reconciles, reads state from store
 6. **CRD Update**: Downstream controller updates ProgressInsight CRD status
 
 ### Notification Routing
 
-| Trigger | Nodes Affected | NodeInsight Notified | MCPInsight Notified |
-|---------|----------------|----------------------|---------------------|
-| Single Node change | 1 | Yes (that node) | Yes (if pool member) |
-| MCP selector change | All in pool | Yes (all affected) | Yes |
-| MachineConfig version change | All with that MC | Yes (all affected) | Yes |
-| ClusterVersion change | All | Yes (all) | Yes |
-| Node deletion | 1 | Yes (deletion) | Yes (for summary recalc) |
+| Trigger                      | Nodes Affected   | NodeInsight Notified | MCPInsight Notified      |
+|------------------------------|------------------|----------------------|--------------------------|
+| Single Node change           | 1                | Yes (that node)      | Yes (if pool member)     |
+| MCP selector change          | All in pool      | Yes (all affected)   | Yes                      |
+| MachineConfig version change | All with that MC | Yes (all affected)   | Yes                      |
+| ClusterVersion change        | All              | Yes (all)            | Yes                      |
+| Node deletion                | 1                | Yes (deletion)       | Yes (for summary recalc) |
 
 ---
 
 ## Cardinality and Scale
 
-| Entity | Expected Count | Notes |
-|--------|----------------|-------|
-| NodeState | 10-1000+ | One per cluster node |
-| NodeStateStore | 1 | Singleton per central controller |
-| DownstreamController | 2-5 | Currently: NodeInsight, MCPInsight |
-| MCP Selectors cached | 2-10 | Typically: master, worker, plus custom pools |
-| MC Versions cached | 10-100 | One per MachineConfig in use |
+| Entity               | Expected Count | Notes                                        |
+|----------------------|----------------|----------------------------------------------|
+| NodeState            | 10-1000+       | One per cluster node                         |
+| Store                | 1              | Singleton per central controller             |
+| DownstreamController | 2-5            | Currently: NodeInsight, MCPInsight           |
+| MCP Selectors cached | 2-10           | Typically: master, worker, plus custom pools |
+| MC Versions cached   | 10-100         | One per MachineConfig in use                 |
 
 ---
 

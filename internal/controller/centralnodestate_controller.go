@@ -19,10 +19,6 @@ package controller
 import (
 	"context"
 
-	openshiftconfigv1 "github.com/openshift/api/config/v1"
-	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
-	"github.com/petr-muller/openshift-update-experience/internal/clusterversions"
-	"github.com/petr-muller/openshift-update-experience/internal/controller/nodestate"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -31,6 +27,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	openshiftconfigv1 "github.com/openshift/api/config/v1"
+	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
+
+	"github.com/petr-muller/openshift-update-experience/internal/clusterversions"
+	"github.com/petr-muller/openshift-update-experience/internal/controller/nodestate"
 )
 
 // CentralNodeStateReconciler is the thin wrapper for CentralNodeStateController.
@@ -53,7 +55,7 @@ func NewCentralNodeStateReconciler(client client.Client) *CentralNodeStateReconc
 // GetStateProvider returns the NodeStateProvider interface for downstream controllers.
 // This should be called after the reconciler is created to pass to downstream controllers
 // that need to read node state.
-func (r *CentralNodeStateReconciler) GetStateProvider() nodestate.NodeStateProvider {
+func (r *CentralNodeStateReconciler) GetStateProvider() nodestate.Provider {
 	return r.impl
 }
 
