@@ -420,7 +420,7 @@ func TestAssessPoolFromNodeStates(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := AssessPoolFromNodeStates(tt.mcpName, tt.scope, tt.isPaused, tt.nodeStates)
+			result := AssessPoolFromNodeStates(tt.mcpName, tt.scope, tt.isPaused, tt.nodeStates, nil)
 
 			// Compare fields
 			if result.Name != tt.expected.Name {

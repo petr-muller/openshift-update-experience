@@ -341,7 +341,7 @@ func TestReconcile_InsightExistsButStatusUnchanged_SkipsUpdate(t *testing.T) {
 	mockProvider.SetPoolNodes("worker", []*nodestate.NodeState{})
 
 	// Get expected status from assessment for empty pool
-	expectedStatusPtr := AssessPoolFromNodeStates("worker", ouev1alpha1.WorkerPoolScope, false, []*nodestate.NodeState{})
+	expectedStatusPtr := AssessPoolFromNodeStates("worker", ouev1alpha1.WorkerPoolScope, false, []*nodestate.NodeState{}, nil)
 
 	// Create an existing insight with correct status
 	insight := &ouev1alpha1.MachineConfigPoolProgressInsight{
