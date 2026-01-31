@@ -29,6 +29,9 @@ import (
 
 const (
 	uscForceHealthInsightAnnotation = "oue.openshift.muller.dev/force-health-insight"
+	// significantTimeDifference is the threshold for considering time field changes significant.
+	// Changes smaller than this are ignored to reduce unnecessary status updates.
+	significantTimeDifference = 30 * time.Second
 )
 
 type Reconciler struct {
@@ -41,6 +44,94 @@ func NewReconciler(client client.Client, scheme *runtime.Scheme) *Reconciler {
 		Client: client,
 		Scheme: scheme,
 	}
+}
+
+// hasSignificantDifference returns true if the new status differs significantly from the old status.
+// It ignores time field differences < 30 seconds to avoid unnecessary API updates due to precision changes.
+func hasSignificantDifference(oldStatus, newStatus *ouev1alpha1.ClusterVersionProgressInsightStatus) bool {
+	// Compare non-time fields
+	if oldStatus.Name != newStatus.Name ||
+		oldStatus.Assessment != newStatus.Assessment ||
+		oldStatus.Completion != newStatus.Completion {
+		return true
+	}
+
+	// Compare versions
+	if oldStatus.Versions.Target.Version != newStatus.Versions.Target.Version ||
+		(oldStatus.Versions.Previous == nil) != (newStatus.Versions.Previous == nil) ||
+		(oldStatus.Versions.Previous != nil && newStatus.Versions.Previous != nil &&
+			oldStatus.Versions.Previous.Version != newStatus.Versions.Previous.Version) {
+		return true
+	}
+
+	// Compare time fields with tolerance
+	if !timeFieldsEqualWithTolerance(oldStatus.StartedAt.Time, newStatus.StartedAt.Time) {
+		return true
+	}
+	if !timeFieldsEqualWithTolerance(oldStatus.LastObservedProgress.Time, newStatus.LastObservedProgress.Time) {
+		return true
+	}
+
+	// Handle nullable time fields
+	if (oldStatus.CompletedAt == nil) != (newStatus.CompletedAt == nil) {
+		return true
+	}
+	if oldStatus.CompletedAt != nil && newStatus.CompletedAt != nil {
+		if !timeFieldsEqualWithTolerance(oldStatus.CompletedAt.Time, newStatus.CompletedAt.Time) {
+			return true
+		}
+	}
+
+	if (oldStatus.EstimatedCompletedAt == nil) != (newStatus.EstimatedCompletedAt == nil) {
+		return true
+	}
+	if oldStatus.EstimatedCompletedAt != nil && newStatus.EstimatedCompletedAt != nil {
+		if !timeFieldsEqualWithTolerance(oldStatus.EstimatedCompletedAt.Time, newStatus.EstimatedCompletedAt.Time) {
+			return true
+		}
+	}
+
+	// Compare conditions (compare all fields including LastTransitionTime with tolerance)
+	if len(oldStatus.Conditions) != len(newStatus.Conditions) {
+		return true
+	}
+	for i := range oldStatus.Conditions {
+		oldCond := oldStatus.Conditions[i]
+		newCond := newStatus.Conditions[i]
+
+		if oldCond.Type != newCond.Type ||
+			oldCond.Status != newCond.Status ||
+			oldCond.Reason != newCond.Reason ||
+			oldCond.Message != newCond.Message {
+			return true
+		}
+
+		// For conditions, also check LastTransitionTime with tolerance
+		if !timeFieldsEqualWithTolerance(oldCond.LastTransitionTime.Time, newCond.LastTransitionTime.Time) {
+			return true
+		}
+	}
+
+	// No significant differences found
+	return false
+}
+
+// timeFieldsEqualWithTolerance returns true if two time values are within the significant time difference threshold.
+func timeFieldsEqualWithTolerance(old, new time.Time) bool {
+	// Handle zero times
+	if old.IsZero() && new.IsZero() {
+		return true
+	}
+	if old.IsZero() || new.IsZero() {
+		return false
+	}
+
+	// Check if the difference is within tolerance
+	diff := new.Sub(old)
+	if diff < 0 {
+		diff = -diff
+	}
+	return diff < significantTimeDifference
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -102,14 +193,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Info("Created ClusterVersionProgressInsight")
 	}
 
-	// Check if status update is needed
-	diff := cmp.Diff(&progressInsight.Status, cvInsight)
-	if diff == "" {
-		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Info("No changes in ClusterVersionProgressInsight, skipping update")
+	// Check if status update is needed (ignoring insignificant time differences)
+	if !hasSignificantDifference(&progressInsight.Status, cvInsight) {
+		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Info("No significant changes in ClusterVersionProgressInsight, skipping update")
 		return ctrl.Result{}, r.reconcileHealthInsights(ctx, &progressInsight, healthInsights)
 	}
 
 	// Update status
+	diff := cmp.Diff(&progressInsight.Status, cvInsight)
 	logger.Info(diff)
 	progressInsight.Status = *cvInsight
 	if err := r.Client.Status().Update(ctx, &progressInsight); err != nil {
