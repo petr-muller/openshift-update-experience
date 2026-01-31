@@ -75,7 +75,7 @@ func TestReconcile_CreatesMasterInsightWithCorrectScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reconcile() returned unexpected error: %v", err)
 	}
-	if result.Requeue {
+	if result != (ctrl.Result{}) {
 		t.Errorf("Reconcile() should not requeue")
 	}
 
@@ -141,7 +141,7 @@ func TestReconcile_CreatesWorkerInsightWithCorrectScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reconcile() returned unexpected error: %v", err)
 	}
-	if result.Requeue {
+	if result != (ctrl.Result{}) {
 		t.Errorf("Reconcile() should not requeue")
 	}
 
@@ -204,7 +204,7 @@ func TestReconcile_CreatesCustomPoolInsightWithWorkerScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reconcile() returned unexpected error: %v", err)
 	}
-	if result.Requeue {
+	if result != (ctrl.Result{}) {
 		t.Errorf("Reconcile() should not requeue")
 	}
 
@@ -255,7 +255,7 @@ func TestReconcile_BothMCPAndInsightDontExist_DoesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reconcile() returned unexpected error: %v", err)
 	}
-	if result.Requeue {
+	if result != (ctrl.Result{}) {
 		t.Errorf("Reconcile() should not requeue")
 	}
 
@@ -311,7 +311,7 @@ func TestReconcile_MCPDoesNotExistButInsightDoes_DeletesInsight(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reconcile() returned unexpected error: %v", err)
 	}
-	if result.Requeue {
+	if result != (ctrl.Result{}) {
 		t.Errorf("Reconcile() should not requeue")
 	}
 
@@ -375,7 +375,7 @@ func TestReconcile_InsightExistsButStatusUnchanged_SkipsUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reconcile() returned unexpected error: %v", err)
 	}
-	if result.Requeue {
+	if result != (ctrl.Result{}) {
 		t.Errorf("Reconcile() should not requeue")
 	}
 
