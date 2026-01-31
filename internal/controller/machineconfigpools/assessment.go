@@ -19,6 +19,7 @@ package machineconfigpools
 import (
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
@@ -27,26 +28,45 @@ import (
 
 // AssessPoolFromNodeStates creates a complete MachineConfigPoolProgressInsightStatus
 // by aggregating node states into pool-level status.
+// It preserves condition LastTransitionTime from previous status when condition content hasn't changed.
 func AssessPoolFromNodeStates(
 	mcpName string,
 	scope ouev1alpha1.ScopeType,
 	isPaused bool,
 	nodeStates []*nodestate.NodeState,
+	previous *ouev1alpha1.MachineConfigPoolProgressInsightStatus,
 ) *ouev1alpha1.MachineConfigPoolProgressInsightStatus {
 	now := time.Now()
 	summaries := calculateNodeSummaries(nodeStates)
 	completion := calculatePoolCompletion(nodeStates)
 	assessment := calculatePoolAssessment(isPaused, nodeStates, summaries)
-	conditions := determinePoolConditions(assessment, summaries, now)
+	newConditions := determinePoolConditions(assessment, summaries, now)
 
-	return &ouev1alpha1.MachineConfigPoolProgressInsightStatus{
+	// Build the status with all fields except conditions
+	status := &ouev1alpha1.MachineConfigPoolProgressInsightStatus{
 		Name:       mcpName,
 		Scope:      scope,
 		Assessment: assessment,
 		Completion: completion,
 		Summaries:  summaries,
-		Conditions: conditions,
 	}
+
+	// Preserve existing condition timestamps using the Kubernetes standard pattern:
+	// For each new condition, use meta.SetStatusCondition which automatically:
+	// - Preserves LastTransitionTime if Type/Status/Reason/Message are unchanged
+	// - Updates LastTransitionTime if the condition changed
+	for _, newCond := range newConditions {
+		// First, add the old condition if it exists (so meta.SetStatusCondition can find it)
+		if previous != nil {
+			if oldCond := meta.FindStatusCondition(previous.Conditions, newCond.Type); oldCond != nil {
+				status.Conditions = append(status.Conditions, *oldCond)
+			}
+		}
+		// Then set the new condition (preserving timestamp if unchanged)
+		meta.SetStatusCondition(&status.Conditions, newCond)
+	}
+
+	return status
 }
 
 // calculatePoolAssessment determines the pool's assessment based on node states.

@@ -100,8 +100,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		scope = ouev1alpha1.WorkerPoolScope
 	}
 
-	// Assess the pool from node states
-	mcpInsight := AssessPoolFromNodeStates(mcp.Name, scope, mcp.Spec.Paused, nodeStates)
+	// Assess the pool from node states, passing previous status to preserve condition timestamps
+	mcpInsight := AssessPoolFromNodeStates(mcp.Name, scope, mcp.Spec.Paused, nodeStates, &progressInsight.Status)
 
 	// Create insight if it doesn't exist
 	if apierrors.IsNotFound(err) {
