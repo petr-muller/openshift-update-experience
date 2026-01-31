@@ -22,11 +22,13 @@ import (
 	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
 	openshiftv1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
 	"github.com/petr-muller/openshift-update-experience/internal/controller/machineconfigpools"
+	"github.com/petr-muller/openshift-update-experience/internal/controller/nodestate"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // MachineConfigPoolProgressInsightReconciler reconciles a MachineConfigPoolProgressInsight object
@@ -34,16 +36,24 @@ type MachineConfigPoolProgressInsightReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
+	// stateProvider is the central node state provider (required)
+	stateProvider nodestate.Provider
+
 	impl *machineconfigpools.Reconciler
 }
 
 // NewMachineConfigPoolProgressInsightReconciler creates a new MachineConfigPoolProgressInsightReconciler
-func NewMachineConfigPoolProgressInsightReconciler(client client.Client, scheme *runtime.Scheme) *MachineConfigPoolProgressInsightReconciler {
-	return &MachineConfigPoolProgressInsightReconciler{
-		Client: client,
-		Scheme: scheme,
+func NewMachineConfigPoolProgressInsightReconciler(client client.Client, scheme *runtime.Scheme, provider nodestate.Provider) *MachineConfigPoolProgressInsightReconciler {
+	if provider == nil {
+		// This should never happen due to main.go check, but defensive programming
+		panic("MachineConfigPoolProgressInsightReconciler requires non-nil NodeStateProvider")
+	}
 
-		impl: machineconfigpools.NewReconciler(client, scheme),
+	return &MachineConfigPoolProgressInsightReconciler{
+		Client:        client,
+		Scheme:        scheme,
+		stateProvider: provider,
+		impl:          machineconfigpools.NewReconciler(client, scheme, provider),
 	}
 }
 
@@ -66,6 +76,7 @@ func (r *MachineConfigPoolProgressInsightReconciler) Reconcile(ctx context.Conte
 }
 
 // SetupWithManager sets up the controller with the Manager.
+// Watches both MachineConfigPool resources and the MCPInsightChannel for notifications.
 func (r *MachineConfigPoolProgressInsightReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&openshiftv1alpha1.MachineConfigPoolProgressInsight{}).
@@ -73,6 +84,13 @@ func (r *MachineConfigPoolProgressInsightReconciler) SetupWithManager(mgr ctrl.M
 		Watches(
 			&openshiftmachineconfigurationv1.MachineConfigPool{},
 			handler.EnqueueRequestsFromMapFunc(r.handleMachineConfigPoolEvent),
+		).
+		// Watch the MCP notification channel from central controller
+		WatchesRawSource(
+			source.Channel(
+				r.stateProvider.MCPInsightChannel(),
+				&handler.EnqueueRequestForObject{},
+			),
 		).
 		Complete(r)
 }

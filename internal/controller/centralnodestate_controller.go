@@ -25,7 +25,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
@@ -120,13 +119,8 @@ func (r *CentralNodeStateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 //
 // T066: Register as Runnable for lifecycle management
 func (r *CentralNodeStateReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Initialize caches before the controller starts
-	ctx := context.Background()
-	logger := logf.FromContext(ctx).WithName("centralnodestate-setup")
-	if err := r.impl.InitializeCaches(ctx); err != nil {
-		logger.Error(err, "Failed to initialize caches during setup")
-		// Continue anyway - caches will be populated as events come in
-	}
+	// Removed InitializeCaches - caches will populate lazily as events arrive
+	// The controller will work correctly as reconciliation events trigger cache population
 
 	// Register the implementation as a Runnable for lifecycle management
 	// This ensures Start() is called on startup and channels are closed on shutdown
