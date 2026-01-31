@@ -93,6 +93,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 		progressInsight.Status = *coInsight
 		if err := r.Status().Update(ctx, &progressInsight); err != nil {
+			if apierrors.IsConflict(err) {
+				// Conflict means another reconciliation updated it, requeue to try again
+				logger.V(1).Info("Conflict updating status after create, will retry", "ClusterOperatorProgressInsight", req.NamespacedName)
+				return ctrl.Result{Requeue: true}, nil
+			}
 			logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Error(err, "Failed to update ClusterOperatorProgressInsight status")
 			return ctrl.Result{}, err
 		}
@@ -114,6 +119,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	progressInsight.Status = *coInsight
 
 	if err := r.Client.Status().Update(ctx, &progressInsight); err != nil {
+		if apierrors.IsConflict(err) {
+			// Conflict means another reconciliation updated it, requeue to try again
+			logger.V(1).Info("Conflict updating status, will retry", "ClusterOperatorProgressInsight", req.NamespacedName)
+			return ctrl.Result{Requeue: true}, nil
+		}
 		logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Error(err, "Failed to update ClusterOperatorProgressInsight status")
 		return ctrl.Result{}, err
 	}

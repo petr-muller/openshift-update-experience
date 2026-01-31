@@ -34,6 +34,7 @@ rules:
   resources:
   - clusteroperatorprogressinsights
   - clusterversionprogressinsights
+  - machineconfigpoolprogressinsights
   - nodeprogressinsights
   - updatehealthinsights
   verbs:
@@ -49,6 +50,7 @@ rules:
   resources:
   - clusteroperatorprogressinsights/finalizers
   - clusterversionprogressinsights/finalizers
+  - machineconfigpoolprogressinsights/finalizers
   - nodeprogressinsights/finalizers
   - updatehealthinsights/finalizers
   verbs:
@@ -58,6 +60,7 @@ rules:
   resources:
   - clusteroperatorprogressinsights/status
   - clusterversionprogressinsights/status
+  - machineconfigpoolprogressinsights/status
   - nodeprogressinsights/status
   - updatehealthinsights/status
   verbs:
