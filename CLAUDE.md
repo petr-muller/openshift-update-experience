@@ -175,7 +175,6 @@ The controller manager supports:
   - NodeProgressInsight reads pre-computed state from the central controller
 - `--enable-machine-config-pool-controller` (default: true)
 - Standard controller-runtime flags (metrics, leader election, etc.)
-<<<<<<< HEAD
 
 ### Metrics (Central Node State Controller)
 
