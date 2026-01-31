@@ -178,6 +178,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	logger.WithValues("NodeProgressInsight", req.NamespacedName).Info(diff)
 	progressInsight.Status = *nodeInsight
 	if err := r.Status().Update(ctx, &progressInsight); err != nil {
+		if errors.IsConflict(err) {
+			// Conflict means another reconciliation updated it, requeue to try again
+			logger.V(1).Info("Conflict updating status, will retry", "NodeProgressInsight", req.NamespacedName)
+			return ctrl.Result{Requeue: true}, nil
+		}
 		logger.WithValues("NodeProgressInsight", req.NamespacedName).Error(err, "Failed to update NodeProgressInsight status")
 		return ctrl.Result{}, err
 	}
