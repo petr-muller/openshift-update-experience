@@ -22,6 +22,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
 	ouev1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
+	"github.com/petr-muller/openshift-update-experience/internal/controller/nodestate"
 	"github.com/petr-muller/openshift-update-experience/internal/mco"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,12 +35,20 @@ import (
 type Reconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	// stateProvider provides access to central node state
+	stateProvider nodestate.Provider
 }
 
-func NewReconciler(client client.Client, scheme *runtime.Scheme) *Reconciler {
+func NewReconciler(client client.Client, scheme *runtime.Scheme, provider nodestate.Provider) *Reconciler {
+	if provider == nil {
+		panic("MCP Reconciler requires non-nil NodeStateProvider")
+	}
+
 	return &Reconciler{
-		Client: client,
-		Scheme: scheme,
+		Client:        client,
+		Scheme:        scheme,
+		stateProvider: provider,
 	}
 }
 
@@ -80,8 +89,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, deleteErr
 	}
 
-	// Assess the MCP and create status
-	mcpInsight := assessMachineConfigPool(&mcp)
+	// Get node states for this pool from the central controller
+	nodeStates := r.stateProvider.GetNodeStatesByPool(mcp.Name)
+
+	// Determine scope based on MCP name
+	var scope ouev1alpha1.ScopeType
+	if mcp.Name == mco.MachineConfigPoolMaster {
+		scope = ouev1alpha1.ControlPlaneScope
+	} else {
+		scope = ouev1alpha1.WorkerPoolScope
+	}
+
+	// Assess the pool from node states
+	mcpInsight := AssessPoolFromNodeStates(mcp.Name, scope, mcp.Spec.Paused, nodeStates)
 
 	// Create insight if it doesn't exist
 	if apierrors.IsNotFound(err) {
@@ -118,21 +138,4 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	logger.WithValues("MachineConfigPoolProgressInsight", req.NamespacedName).Info("Updated MachineConfigPoolProgressInsight status")
 	return ctrl.Result{}, nil
-}
-
-// assessMachineConfigPool creates the status for a MachineConfigPoolProgressInsight
-// For now, it only sets Name and Scope fields
-func assessMachineConfigPool(mcp *openshiftmachineconfigurationv1.MachineConfigPool) *ouev1alpha1.MachineConfigPoolProgressInsightStatus {
-	status := &ouev1alpha1.MachineConfigPoolProgressInsightStatus{
-		Name: mcp.Name,
-	}
-
-	// Determine scope based on MCP name
-	if mcp.Name == mco.MachineConfigPoolMaster {
-		status.Scope = ouev1alpha1.ControlPlaneScope
-	} else {
-		status.Scope = ouev1alpha1.WorkerPoolScope
-	}
-
-	return status
 }

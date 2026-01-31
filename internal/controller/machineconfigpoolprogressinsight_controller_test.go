@@ -22,13 +22,37 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	openshiftv1alpha1 "github.com/petr-muller/openshift-update-experience/api/v1alpha1"
+	"github.com/petr-muller/openshift-update-experience/internal/controller/nodestate"
 )
+
+// mockNodeStateProvider is a simple mock for testing
+type mockNodeStateProvider struct{}
+
+func (m *mockNodeStateProvider) GetNodeState(nodeName string) (*nodestate.NodeState, bool) {
+	return nil, false
+}
+
+func (m *mockNodeStateProvider) GetAllNodeStates() []*nodestate.NodeState {
+	return nil
+}
+
+func (m *mockNodeStateProvider) GetNodeStatesByPool(poolName string) []*nodestate.NodeState {
+	return []*nodestate.NodeState{}
+}
+
+func (m *mockNodeStateProvider) NodeInsightChannel() <-chan event.GenericEvent {
+	return make(chan event.GenericEvent)
+}
+
+func (m *mockNodeStateProvider) MCPInsightChannel() <-chan event.GenericEvent {
+	return make(chan event.GenericEvent)
+}
 
 var _ = Describe("MachineConfigPoolProgressInsight Controller", func() {
 	Context("When reconciling a resource", func() {
@@ -68,7 +92,9 @@ var _ = Describe("MachineConfigPoolProgressInsight Controller", func() {
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := NewMachineConfigPoolProgressInsightReconciler(k8sClient, k8sClient.Scheme())
+			// Create a mock node state provider for testing
+			mockProvider := &mockNodeStateProvider{}
+			controllerReconciler := NewMachineConfigPoolProgressInsightReconciler(k8sClient, k8sClient.Scheme(), mockProvider)
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,

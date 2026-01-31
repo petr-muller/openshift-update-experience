@@ -246,11 +246,18 @@ func main() {
 	}
 
 	// Automatic dependency enablement: CentralNodeState controller is automatically
-	// enabled when NodeProgressInsight controller is enabled
-	enableNodeState := controllers.enableNode
+	// enabled when either NodeProgressInsight or MachineConfigPoolProgressInsight controller is enabled
+	enableNodeState := controllers.enableNode || controllers.enableMachineConfigPool
 	if enableNodeState {
+		var reasons []string
+		if controllers.enableNode {
+			reasons = append(reasons, "NodeProgressInsight")
+		}
+		if controllers.enableMachineConfigPool {
+			reasons = append(reasons, "MachineConfigPoolProgressInsight")
+		}
 		setupLog.Info("CentralNodeState controller auto-enabled",
-			"reason", "NodeProgressInsight controller is enabled")
+			"required-by", reasons)
 	}
 
 	// CentralNodeState controller must be set up first if enabled, as it provides
@@ -292,8 +299,21 @@ func main() {
 	}
 
 	if controllers.enableMachineConfigPool {
+		// Fail fast if central controller is not available (should not happen with automatic enablement)
+		if centralNodeState == nil {
+			setupLog.Error(nil, "MachineConfigPoolProgressInsight controller requires CentralNodeState controller",
+				"required-by", "MachineConfigPoolProgressInsight",
+				"missing", "CentralNodeState",
+				"fix", "This is a bug in automatic enablement logic")
+			os.Exit(1)
+		}
+
 		setupLog.Info("Setting up MachineConfigPoolProgressInsight controller")
-		mcpInformer := controller.NewMachineConfigPoolProgressInsightReconciler(mgr.GetClient(), mgr.GetScheme())
+		mcpInformer := controller.NewMachineConfigPoolProgressInsightReconciler(
+			mgr.GetClient(),
+			mgr.GetScheme(),
+			centralNodeState.GetStateProvider(),
+		)
 		if err = mcpInformer.SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "MachineConfigPoolProgressInsight")
 			os.Exit(1)
