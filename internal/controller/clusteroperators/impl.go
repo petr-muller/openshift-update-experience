@@ -3,6 +3,7 @@ package clusteroperators
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	openshiftconfigv1 "github.com/openshift/api/config/v1"
@@ -96,7 +97,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			if apierrors.IsConflict(err) {
 				// Conflict means another reconciliation updated it, requeue to try again
 				logger.V(1).Info("Conflict updating status after create, will retry", "ClusterOperatorProgressInsight", req.NamespacedName)
-				return ctrl.Result{Requeue: true}, nil
+				return ctrl.Result{RequeueAfter: time.Second}, nil
 			}
 			logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Error(err, "Failed to update ClusterOperatorProgressInsight status")
 			return ctrl.Result{}, err
@@ -122,7 +123,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if apierrors.IsConflict(err) {
 			// Conflict means another reconciliation updated it, requeue to try again
 			logger.V(1).Info("Conflict updating status, will retry", "ClusterOperatorProgressInsight", req.NamespacedName)
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 		logger.WithValues("ClusterOperatorProgressInsight", req.NamespacedName).Error(err, "Failed to update ClusterOperatorProgressInsight status")
 		return ctrl.Result{}, err
@@ -159,7 +160,7 @@ type deploymentGetter func(ctx context.Context, what types.NamespacedName) (apps
 func assessClusterOperator(_ context.Context, operator *openshiftconfigv1.ClusterOperator, targetVersion string, _ deploymentGetter, existingConditions []metav1.Condition) *ouev1alpha1.ClusterOperatorProgressInsightStatus {
 	// Start with only the conditions we manage to avoid accumulating stale conditions
 	// meta.SetStatusCondition will preserve LastTransitionTime when status doesn't change
-	conditions := []metav1.Condition{}
+	var conditions []metav1.Condition
 	for _, cond := range existingConditions {
 		if cond.Type == string(ouev1alpha1.ClusterOperatorProgressInsightUpdating) ||
 			cond.Type == string(ouev1alpha1.ClusterOperatorProgressInsightHealthy) {

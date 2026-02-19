@@ -34,7 +34,7 @@ import (
 // mockNodeStateProvider is a simple mock for testing
 type mockNodeStateProvider struct{}
 
-func (m *mockNodeStateProvider) GetNodeState(nodeName string) (*nodestate.NodeState, bool) {
+func (m *mockNodeStateProvider) GetNodeState(_ string) (*nodestate.NodeState, bool) {
 	return nil, false
 }
 
@@ -42,7 +42,7 @@ func (m *mockNodeStateProvider) GetAllNodeStates() []*nodestate.NodeState {
 	return nil
 }
 
-func (m *mockNodeStateProvider) GetNodeStatesByPool(poolName string) []*nodestate.NodeState {
+func (m *mockNodeStateProvider) GetNodeStatesByPool(_ string) []*nodestate.NodeState {
 	return []*nodestate.NodeState{}
 }
 

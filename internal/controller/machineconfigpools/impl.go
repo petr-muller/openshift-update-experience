@@ -18,6 +18,7 @@ package machineconfigpools
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	openshiftmachineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
@@ -112,7 +113,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			}
 			// Object was created by another reconciliation, requeue to retry
 			logger.V(1).Info("MachineConfigPoolProgressInsight already exists, will retry", "MachineConfigPoolProgressInsight", req.NamespacedName)
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 		logger.WithValues("MachineConfigPoolProgressInsight", req.NamespacedName).Info("Created MachineConfigPoolProgressInsight")
 	}
@@ -131,7 +132,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if apierrors.IsConflict(err) {
 			// Conflict means another reconciliation updated it, requeue to try again
 			logger.V(1).Info("Conflict updating status, will retry", "MachineConfigPoolProgressInsight", req.NamespacedName)
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 		logger.WithValues("MachineConfigPoolProgressInsight", req.NamespacedName).Error(err, "Failed to update status")
 		return ctrl.Result{}, err
