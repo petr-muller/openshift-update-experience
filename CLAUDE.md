@@ -143,6 +143,28 @@ The plugin reads ProgressInsight CRDs and formats them for display:
 - **Controller Manager**: `cmd/main.go` - Sets up manager with all four controllers
 - **CLI Plugin**: `cmd/oc-update-status/main.go` - Cobra-based CLI
 
+## Specifications
+
+Semi-formal behavioral specs live in `specs/`. They document what the code does (or should do), serving as a reference for future development and a forcing function to think through behavior before implementing.
+
+### Structure
+
+```
+specs/
+  controllers/
+    clusterversion/spec.md   # ClusterVersion progress insight controller
+```
+
+### Process
+
+Before implementing any significant feature — new controller behavior, new CRD fields, changes to assessment or lifecycle logic — update or create the relevant spec first. The spec should describe the intended behavior clearly enough to stand alone without reading the code.
+
+- **Altering existing behavior:** Update the relevant `spec.md` section before writing code.
+- **New controller or major subsystem:** Create a new `spec.md` under an appropriate `specs/` subdirectory.
+- **Small bugfixes or refactors with no behavioral change:** No spec update needed.
+
+The spec is a living document; keep it in sync with the implementation as things change.
+
 ## Development Notes
 
 ### Testing Philosophy
