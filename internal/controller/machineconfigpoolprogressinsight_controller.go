@@ -97,7 +97,7 @@ func (r *MachineConfigPoolProgressInsightReconciler) SetupWithManager(mgr ctrl.M
 
 // handleMachineConfigPoolEvent maps MachineConfigPool events to reconcile requests
 // Since insight names match MCP names 1:1, we just return a request with the same name
-func (r *MachineConfigPoolProgressInsightReconciler) handleMachineConfigPoolEvent(ctx context.Context, obj client.Object) []reconcile.Request {
+func (r *MachineConfigPoolProgressInsightReconciler) handleMachineConfigPoolEvent(_ context.Context, obj client.Object) []reconcile.Request {
 	return []reconcile.Request{
 		{NamespacedName: client.ObjectKey{Name: obj.GetName()}},
 	}

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -59,14 +60,6 @@ type Reconciler struct {
 	now func() metav1.Time
 }
 
-func NewReconciler(client client.Client, scheme *runtime.Scheme) *Reconciler {
-	return &Reconciler{
-		Client: client,
-		Scheme: scheme,
-		now:    metav1.Now,
-	}
-}
-
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
@@ -104,14 +97,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if progressInsightNotFound {
 			logger.WithValues("NodeProgressInsight", req.NamespacedName).Info("Both Node and NodeProgressInsight do not exist, nothing to do")
 			return ctrl.Result{}, nil
-		} else {
-			logger.WithValues("NodeProgressInsight", req.NamespacedName).Info("Node does not exist, deleting NodeProgressInsight")
-			err := r.Delete(ctx, &progressInsight)
-			if err != nil {
-				logger.Error(err, "Failed to delete NodeProgressInsight")
-			}
-			return ctrl.Result{}, err
 		}
+
+		logger.WithValues("NodeProgressInsight", req.NamespacedName).Info("Node does not exist, deleting NodeProgressInsight")
+		err := r.Delete(ctx, &progressInsight)
+		if err != nil {
+			logger.Error(err, "Failed to delete NodeProgressInsight")
+		}
+		return ctrl.Result{}, err
 	}
 
 	mcpName := r.mcpSelectors.WhichMCP(labels.Set(node.Labels))
@@ -159,7 +152,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			logger.WithValues("NodeProgressInsight", req.NamespacedName).Error(err, "Failed to create NodeProgressInsight")
 			return ctrl.Result{}, err
 		}
-		// Create() populates progressInsight with resourceVersion, UID, etc from the server
+		// Create() populates progressInsight with resourceVersion, UID, etc. from the server
 		logger.WithValues("NodeProgressInsight", req.NamespacedName).Info("Created NodeProgressInsight for Node")
 	}
 
@@ -181,7 +174,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if errors.IsConflict(err) {
 			// Conflict means another reconciliation updated it, requeue to try again
 			logger.V(1).Info("Conflict updating status, will retry", "NodeProgressInsight", req.NamespacedName)
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 		logger.WithValues("NodeProgressInsight", req.NamespacedName).Error(err, "Failed to update NodeProgressInsight status")
 		return ctrl.Result{}, err

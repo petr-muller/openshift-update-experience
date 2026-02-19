@@ -187,9 +187,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			}
 			// Object was created by another reconciliation, requeue to retry with latest version
 			logger.V(1).Info("ClusterVersionProgressInsight already exists, will retry", "ClusterVersionProgressInsight", req.NamespacedName)
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
-		// Create() populates progressInsight with resourceVersion, UID, etc from the server
+		// Create() populates progressInsight with resourceVersion, UID, etc. from the server
 		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Info("Created ClusterVersionProgressInsight")
 	}
 
@@ -207,7 +207,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if apierrors.IsConflict(err) {
 			// Conflict means another reconciliation updated it, requeue to try again with latest version
 			logger.V(1).Info("Conflict updating ClusterVersionProgressInsight status, will retry", "ClusterVersionProgressInsight", req.NamespacedName)
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 		logger.WithValues("ClusterVersionProgressInsight", req.NamespacedName).Error(err, "Failed to update ClusterVersionProgressInsight status")
 		return ctrl.Result{}, err
@@ -448,15 +448,15 @@ func estimateCompletion(baseline, toLastObservedProgress, updatingFor time.Durat
 
 	if estimateTimeToComplete > 10*time.Minute {
 		return estimateTimeToComplete.Round(time.Minute)
-	} else {
-		return estimateTimeToComplete.Round(time.Second)
 	}
+
+	return estimateTimeToComplete.Round(time.Second)
 }
 
-// timewiseComplete returns the estimated timewise completion given the cluster operator completion percentage
-// Typical cluster achieves 97% cluster operator completion in 67% of the time it takes to reach 100% completion
-// The function is a combination of 3 polynomial functions that approximate the curve of the completion percentage
-// The polynomes were obtained by curve fitting update progress on b01 cluster
+// timewiseComplete returns the estimated timewise completion given the cluster operator completion percentage.
+// Typical cluster achieves 97% cluster operator completion in 67% of the time it takes to reach 100% completion.
+// The function is a combination of 3 polynomial functions that approximate the curve of the completion percentage.
+// The polynomes were obtained by curve fitting update progress on b01 cluster.
 func timewiseComplete(coCompletion float64) float64 {
 	x := coCompletion
 	x2 := x * x
